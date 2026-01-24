@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "PersonaBuddy",
+  "version": "2.0",
+  "description": "PersonaBuddy bridges the gap between you and personalized algorithms, providing tailored recommendations and friendly interactions, making technology feel like a true companion.",
+  "icons": {
+      "16": "icons/logo.png",
+      "32": "icons/logo.png",
+      "48": "icons/logo.png",
+      "128": "icons/logo.png"
+  },
+  "action": {
+      "default_popup": "index.html"
+  },
+  "content_scripts": [
+        {
+            "js": [
+                "contents/zhihu.js"
+            ],
+            "matches": [
+                "https://www.zhihu.com/*",
+                "https://www.bilibili.com/*",
+                "https://www.toutiao.com/*"
+            ]
+        }
+    ],
+    "web_accessible_resources": [
+    {
+      "resources": ["contents/constants.js"],
+      "matches": [ "https://www.zhihu.com/*"]
+    }
+    ],
+    "permissions": [
+        "storage"
+    ],
+    "background": {
+        "service_worker": "background/zhihu.js"
+    }
+    ,"_comments": {
+        "manifest_version": "清单格式版本，Chrome 扩展必须为 3",
+        "name": "扩展名称（展示给用户）",
+        "version": "扩展版本号",
+        "description": "扩展简要描述",
+        "icons": "扩展图标路径（不同尺寸用于展示）",
+        "action.default_popup": "点击工具栏图标时打开的默认弹窗页面",
+        "content_scripts": "注入到匹配网站的脚本列表，这里注入 contents/zhihu.js 到知乎、B站页面",
+        "web_accessible_resources": "运行时网页可访问的资源白名单，这里开放 contents/constants.js 给知乎页面访问",
+        "permissions": "所需权限，这里为 storage（浏览器存储）",
+        "background.service_worker": "后台常驻脚本（Service Worker），处理消息/后台逻辑"
+    }
+}

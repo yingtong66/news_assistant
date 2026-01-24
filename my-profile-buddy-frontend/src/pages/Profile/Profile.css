@@ -1,0 +1,99 @@
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.list-item {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+    text-align: left;
+}
+
+.item-title {
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.item-title[contenteditable="true"], .item-description[contenteditable="true"] {
+    border: 1px solid #ccc;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+.item-description {
+    margin-bottom: 10px;
+}
+
+.item-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.item-controls button {
+    margin-right: 10px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+}
+
+.green-button {
+    background-color: #4CAF50;
+}
+
+.red-button {
+    background-color: #F44336;
+}
+
+.blue-button {
+    background-color: #2196F3;
+}
+
+.item-platform {
+    margin-right: 10px;
+}
+
+.add-button-container {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.add-button-container button {
+    padding: 10px 20px;
+    font-size: 16px;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.container {
+    text-align: center;
+    padding: 20px;
+}
+
+.title {
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+
+
+.layoutStyle {
+    display: flex;
+    flex-direction: column;
+}
+
+.contentStyle {
+    padding-inline: 50px;
+    padding-block: 20px;
+    overflow-y: auto; /* 当内容超出时，显示滚动条 */
+    flex: 1; /* 让 Content 占据剩余空间 */
+}
