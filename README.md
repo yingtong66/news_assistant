@@ -1,4 +1,4 @@
-# PersonaBuddy
+# news_assistant
 
 浏览器插件 + Web应用，基于用户规则对推荐内容进行 LLM 过滤与重排（知乎/B站/头条）。当前重点测试头条平台。
 

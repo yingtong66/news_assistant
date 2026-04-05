@@ -1,11 +1,11 @@
-# PersonaBuddy
+# news_assistant
 
 浏览器插件 + Web应用，用于个性化推荐内容过滤（知乎/B站/头条）。当前重点测试头条平台效果，其他平台可暂不关注。
 
 ## 架构
 
 三层结构:
-- **Django 后端** (`agent/` + `PersonaBuddy/`): REST API，处理过滤判定、聊天对话、规则/画像管理。SQLite 开发数据库。
+- **Django 后端** (`agent/` + `news_assistant/`): REST API，处理过滤判定、聊天对话、规则/画像管理。SQLite 开发数据库。
 - **React 前端** (`my-profile-buddy-frontend/`): 用户界面，包含聊天组件、规则管理页面、路由。使用 antd UI 库。前端 proxy 到 `localhost:8000`。
 - **浏览器扩展脚本** (`my-profile-buddy-frontend/public/`): content_script 注入知乎/B站/头条页面，采集推荐卡片并过滤；background service worker 转发请求。manifest.json 已配置 toutiao.com 匹配。
 - **online_TwoStage** (`online_TwoStage/`): 两阶段重排模块。`/reorder` 接口调用此模块，基于用户 Rule 规则调 LLM 过滤 + 重排候选卡片。
@@ -28,7 +28,7 @@
 
 ## 本地运行
 
-Python 虚拟环境位于 `.venv/`（从 PersonaBuddy-master 迁移，Python 3.11.15）。
+Python 虚拟环境位于 `.venv/`（从 news_assistant-master 迁移，Python 3.11.15）。
 
 ```bash
 # 后端
@@ -56,5 +56,5 @@ npm start  # localhost:3000, proxy -> 8000
 - `my-profile-buddy-frontend/public/contents/zhihu.js` - 内容注入脚本
 - `online_TwoStage/pipeline.py` - 两阶段重排主流程（过滤+重排）
 - `online_TwoStage/prompts.py` - 过滤/重排 prompt 常量
-- `PersonaBuddy/settings.py` - Django 配置
+- `news_assistant/settings.py` - Django 配置
 - `toutiao.html` - 头条页面参考/测试文件

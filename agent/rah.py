@@ -15,7 +15,7 @@ from .utils import get_edit_distance
 logger = logging.getLogger("myapp")
 from  retry import retry
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'PersonaBuddy.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'news_assistant.settings')
 django.setup()
 from .models import PersonalitiesClick
 
@@ -156,7 +156,7 @@ def get_rah_personalities(pid, platform, pos_records, neg_records, sample_num=1,
 if __name__=="__main__":
     import django
     from .utils import get_edit_distance
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'PersonaBuddy.settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'news_assistant.settings')
     django.setup()
 
     clicks = ['当今科研圈，social不行是不是科研生涯也就到头了？', '电影《抓娃娃》表达了一个什么主题？']

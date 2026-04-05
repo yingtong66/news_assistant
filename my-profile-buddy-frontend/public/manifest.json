@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "PersonaBuddy",
+  "name": "news_assistant",
   "version": "2.0",
-  "description": "PersonaBuddy bridges the gap between you and personalized algorithms, providing tailored recommendations and friendly interactions, making technology feel like a true companion.",
+  "description": "news_assistant bridges the gap between you and personalized algorithms, providing tailored recommendations and friendly interactions, making technology feel like a true companion.",
   "icons": {
     "16": "icons/logo.png",
     "32": "icons/logo.png",

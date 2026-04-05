@@ -1,6 +1,6 @@
 import os
 import django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'PersonaBuddy.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'news_assistant.settings')
 django.setup()
 from agent.models import *
 import random
