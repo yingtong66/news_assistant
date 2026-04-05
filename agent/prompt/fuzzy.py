@@ -27,13 +27,7 @@ def get_has_action(messages):
      返回 has_likes, has_dislikes, histories 
     '''
     histories = [{"role": "user", "content": HAS_ACTION_PROMPT.format(messages=messages)}]
-    log_str = "******check has action prompt********\n"
-    log_str += str(histories)+"\n"
     response = get_bailian_response(histories, model=DIALOG_MODEL)
-    log_str+= "*****begin to print response.*****\n"
-    log_str+= str(response) + "\n"
-    log_str+= "*****end to print response.*****\n"
-    logger.debug(log_str)
     histories.append({"role": "assistant", "content": response})
 
     try:
@@ -43,11 +37,11 @@ def get_has_action(messages):
             res = json.loads(response)
         choice , needs = res["choice"], res["needs"]
     except:
-        logger.error("get_has_action: json.loads error")
-        print(response)
+        logger.error("[Fuzzy] 解析用户意图失败, LLM原始输出: %s", response[:200])
         return False, False, histories, response, None
     has_likes =True if "想看的内容" in choice else False
     has_dislikes = True if "不想看的内容" in choice else False
+    logger.info("[Fuzzy] 用户意图判断: has_likes=%s, has_dislikes=%s, needs=%s", has_likes, has_dislikes, needs)
     return has_likes, has_dislikes, histories, response, needs
 
 
@@ -67,15 +61,9 @@ ANALYSE_RULES_PROMPT ='''目前，用户已经定义了如下{count}条规则：
 '''
 def get_analyse_rules(rules, count, histories, needs):
     histories.append({"role": "user", "content": ANALYSE_RULES_PROMPT.format(rules=rules, count=count, needs=needs)})
-    log_str = "******check analyse rules prompt********\n"
-    log_str += str(histories)+"\n"
     response = get_bailian_response(histories, model=DIALOG_MODEL)
-    log_str+= "*****begin to print analyse rules.*****\n"
-    log_str+= str(response) + "\n"
-    log_str+= "*****end to print analyse rules.*****\n"
-    logger.debug(log_str)
-
     histories.append({"role": "assistant", "content": response})
+    logger.info("[Fuzzy] 规则关联分析完成 (%d条规则 vs 需求: %s)", count, needs)
     return response, histories
 
 # 生成新增或添加的指令
@@ -103,13 +91,7 @@ def get_change_rules(histories, needs):
     return need_add, need_update, histories, change_item 
     '''
     histories.append({"role": "user", "content": CHANGE_RULES_PROMPT.format(needs=needs)})
-    log_str = "******check change rules prompt********\n"
-    log_str += str(histories)+"\n"
     response = get_bailian_response(histories, model=DIALOG_MODEL)
-    log_str+= "*****begin to print rules.*****\n"
-    log_str+= str(response) + "\n"
-    log_str+= "*****end to print rules.*****\n"
-    logger.debug(log_str)
 
     if response.startswith("对不起"):
         return False, False, histories, None, None
@@ -157,13 +139,7 @@ DEL_RULES_PROMPT ="""根据你的分析，请你告诉我应该如何操作已�
 @retry(tries=3, delay=1, backoff=2)
 def get_contradiction_rules(histories, needs):
     histories.append({"role": "user", "content": DEL_RULES_PROMPT.format(needs=needs)})
-    log_str = "******check contradiction rules prompt********\n"
-    log_str += str(histories)+"\n"
     response = get_bailian_response(histories, model=DIALOG_MODEL)
-    log_str+= "*****begin to print rules.*****\n"
-    log_str+= str(response) + "\n"
-    log_str+= "*****end to print rules.*****\n"
-    logger.debug(log_str)
 
     if response.startswith("对不起"):
         return False, False, histories, None, None
@@ -210,13 +186,7 @@ CHANGE_POSITIVE_RULES_PROMPT = """根据你的分析，请你告诉我应该如�
 @retry(tries=3, delay=1, backoff=2)
 def get_change_positive_rules(histories, needs):
     histories.append({"role": "user", "content": CHANGE_POSITIVE_RULES_PROMPT.format(needs=needs)})
-    log_str = "******check change positive rules prompt********\n"
-    log_str += str(histories)+"\n"
     response = get_bailian_response(histories, model=DIALOG_MODEL)
-    log_str+= "*****begin to print positive rules.*****\n"
-    log_str+= str(response) + "\n"
-    log_str+= "*****end to print positive rules.*****\n"
-    logger.debug(log_str)
 
     if response.startswith("对不起"):
         return False, False, histories, None, None
@@ -282,8 +252,7 @@ def get_fuzzy(chat_history, rules, platform=None, pid=None, max_iid=-1):
         # 获取规则变更建议（新增或更新）
         need_add, need_update, histories, update_id, new_rule = get_change_rules(histories, needs)
         
-        print("need_update, need_add, update_id:", need_update, need_add, update_id)
-        logger.warn("need_update, need_add, update_id: %s, %s, %s", need_update, need_add, update_id)
+        logger.info("[Fuzzy] 负向规则决策: need_add=%s, need_update=%s, update_id=%s, rule=%s", need_add, need_update, update_id, new_rule)
         
         # 处理新增规则的情况
         if need_add:
@@ -435,8 +404,12 @@ def get_fuzzy(chat_history, rules, platform=None, pid=None, max_iid=-1):
     
     # 情况3：没有明确的"想看"或"不想看"需求
     else:
-        # 返回普通对话响应，无操作
-        response = get_common_response(chat_history)
+        # 将用户规则信息注入上下文，让普通回复能看到规则
+        if rules_str.strip():
+            rules_context = "\n\n当前用户已配置的规则如下：\n" + rules_str.strip()
+        else:
+            rules_context = "\n\n当前用户没有配置任何规则。"
+        response = get_common_response(chat_history + rules_context)
         return response, []
 
 if __name__ == "__main__":

@@ -183,6 +183,16 @@ def dialogue(request): #ok
     # 调用模糊匹配算法获取响应和操作列表
     response, actions = get_fuzzy(chat_history=messges_str, rules=rules_json, platform=platform_id, pid=pid, max_iid=next_iid)
 
+    # 打印对话结果摘要
+    if actions:
+        action_types = {1: '新增', 2: '更新', 3: '删除', 4: '搜索'}
+        for a in actions:
+            atype = action_types.get(a['type'], '未知')
+            rule_text = a.get('profile', {}).get('rule', '') or a.get('keywords', [''])[0]
+            logger.info("[Dialogue] 操作: %s, 内容: %s", atype, rule_text)
+    else:
+        logger.info("[Dialogue] 无操作, 普通回复: %s", response[:100] if response else '(空)')
+
     # 记录生成的操作行为到相应的日志表
     for action in actions:
         if action['type'] == 4:

@@ -1,4 +1,4 @@
-agent/prompt/api.json
+# agent/prompt/api.json
 *.pyc
 *.sqlite3
 .idea
