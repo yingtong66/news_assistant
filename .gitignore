@@ -10,3 +10,4 @@ agent/personalities/*.gml
 logs/*
 .venv/*
 .claude/*
+.output

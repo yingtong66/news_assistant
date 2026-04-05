@@ -5,6 +5,56 @@
 2. 对话函数，根据对话历史生成下一条
 3. 重排序和过滤函数，api根据对话
 
+## 2026-04-05 重写过滤/重排 prompt + 平台编号调整 + 日志精简
+
+### 参考 offline prompt 重写 online prompts.py
+- 过滤 prompt：去掉"保守过滤"、"明确违反"、"70%保底"等约束，改为"只要与规则沾边或相关就移除，宁可多过滤不要漏掉"。增加 filtered_list 和 removed_list 不能重复的要求。
+- 重排 prompt：明确"不是过滤器，不能删除"，不确定时保持原序，不相关条目排末尾。
+- 参考了 `offline_TwoStage/prompt/filtering.yaml` 和 `reranking.yaml` 的结构和措辞。
+
+### 平台编号调整：头条=0（默认）, 知乎=1, B站=2
+- 后端 `agent/const.py` 的 `PLATFORM_CHOICES` 顺序改为 头条/知乎/B站。
+- 前端 `Const.js` 的 `platformOptions` 同步调整。
+- `zhihu.js` 中 setupClickListener (3处)、processElement 判断 (3处)、feedConfigs (3处) 共 9 处平台编号更新。
+- 头条作为当前测试重点，设为默认值 0。
+
+### pipeline.py 日志精简
+- 注释掉过滤和重排两处 LLM 原始响应的完整打印（冗余，最终结果已有清晰输出）。
+- 去掉过滤阶段逐条 "移除: id=x title=xxx" 的日志。
+- 最终输出分 rerank_list 和 removed_list 两部分，带序号和标题，清晰展示结果。
+
+### 修复 LLM 返回重复条目问题
+- LLM 可能把同一条目同时放进 filtered_list 和 removed_list（如保留20+移除4=24条）。
+- 在 `run_filtering` 中用 `removed_ids_set` 从 `filtered_list` 剔除重复。
+- 在 `run_two_stage_reorder` 的兜底逻辑中，构建 `rerank_order` 时也排除 `removed_ids`，保证两部分互斥且并集为全部条目。
+
+## 2026-04-05 生成 requirements.txt
+
+- 用 `pip freeze` 导出当前 `.venv/` 虚拟环境的完整依赖到 `requirements.txt`，替换之前不完整的版本。
+
+## 2026-04-05 统一走 /reorder 路径 + 正向规则支持 + 日志优化
+
+### 禁用 /browse 逐条过滤，统一走 /reorder 批量两阶段重排
+- `zhihu.js` 的 `processElement` 中 `/browse` 请求、`element.remove()` 删除逻辑、知乎"处理完了"标签全部注释掉（保留原代码）。
+- 现在所有过滤+重排统一由 `/reorder` 接口的两阶段流程处理。
+
+### 改善 pipeline.py 日志输出
+- 去掉 LLM 响应 `[:500]` 截断，之前只能看到部分结果。
+- 日志改为分阶段输出：`[TwoStage-过滤]` 显示规则内容和逐条移除详情，`[TwoStage-重排]` 显示偏好和输出条数，首尾有 `=== 开始/完成 ===` 标记。
+
+### 去掉 70% 保底回退机制
+- 注释掉 `pipeline.py` 中"过滤后数量 < 70% 则回退全量"的逻辑。实际场景中（如规则"不看政治"）头条 20 条里 14 条被过滤是正常的，回退会导致过滤完全失效。
+
+### 前端 id 从 1 开始
+- `zhihu.js` 的 `reorderNewNodes` 中 items 构造和 idToNode 映射从 `index` 改为 `index + 1`，后端收到的 id 从 "1" 到 "20"。
+
+### 修复前端平台选项：微博 -> 头条
+- `Const.js` 中 `platformOptions` 的 `value: 2` 对应 label 从"微博"改为"头条"，与后端 `PLATFORM_CHOICES[2] = ('头条', '头条')` 对齐。之前保存规则时 platform 传 0（知乎），导致 /reorder 查不到头条规则。
+
+### 支持正向规则"我想看xx"
+- `Profile.jsx` 和 `ChangeProfile.jsx` 的规则校验从只允许"我不想看"开头，放宽为"我不想看"或"我想看"开头。
+- `pipeline.py` 的 `run_two_stage_reorder` 按前缀区分规则：`"我不想看..."` 进 `negative_group`（过滤阶段），`"我想看..."` 进 `positive_group`（重排阶段，让匹配内容排前面）。
+
 ## 2026-04-04 修复滚动加载过多问题
 
 - 头条页面实际加载 40+ 条卡片，远超 20 条重排额度。
