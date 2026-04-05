@@ -187,6 +187,61 @@ def get_contradiction_rules(histories, needs):
         return need_del, need_update, update_id[0], rule
     return False, False, None, None
 
+
+# 正向规则新增/更新 prompt
+CHANGE_POSITIVE_RULES_PROMPT = """根据你的分析，请你告诉我应该如何操作已有的正向规则，以将你新总结的用户需求“{needs}”加入到规则列表中。你可以进行“新增”和“更新”两种操作：
+1、当你新总结的用户需求与任意一条已有规则的关联性都很小时，你可以选择“新增”一条规则。
+2、为了避免重复并保持规则列表的简洁性，当你新总结的用户需求与某一条已有规则的关联性很大时，你可以选择“更新”该已有规则。
+
+请你以json格式回复，它包含4个字段：
+- analysis：字符串格式，值代表你对该问题的分析
+- choice：字符串格式，值代表你的答案；注意，你只能在下面两个字符串中选一个作为回复：“新增”, “更新”
+- rule_id：字符串格式，如果choice的值为“更新”，则该字段的值代表要更新的规则的id；如果choice的值为“新增”，则该字段为空字符串
+- rule：字符串格式，根据choice的值，该字段的值为将你总结的新需求合并到rule_id所对应的规则中后新生成的规则，或者根据你总结的新需求新增的规则，请以“我想看”开头
+
+请严格按照以下格式返回结果：
+{{
+    "analysis": "<你对该问题的分析>",
+    "choice": "<你的答案（新增/更新）>",
+    "rule_id": "<规则编号/空字符串>",
+    "rule": <更新或新增的规则内容（我想看）>
+}}
+"""
+@retry(tries=3, delay=1, backoff=2)
+def get_change_positive_rules(histories, needs):
+    histories.append({"role": "user", "content": CHANGE_POSITIVE_RULES_PROMPT.format(needs=needs)})
+    log_str = "******check change positive rules prompt********\n"
+    log_str += str(histories)+"\n"
+    response = get_bailian_response(histories, model=DIALOG_MODEL)
+    log_str+= "*****begin to print positive rules.*****\n"
+    log_str+= str(response) + "\n"
+    log_str+= "*****end to print positive rules.*****\n"
+    logger.debug(log_str)
+
+    if response.startswith("对不起"):
+        return False, False, histories, None, None
+    if response.startswith("```"):
+        data = json.loads(extract_code_blocks(response,"json"))
+    else:
+        data = json.loads(response)
+    analysis = data['analysis']
+    choice = data['choice']
+    rule_id = data['rule_id']
+    rule = data['rule']
+
+    need_add = True if "新增" in choice else False
+    need_update = True if "更新" in choice else False
+    if need_add:
+        return need_add, need_update, histories, None, rule
+    if need_update:
+        update_id = re.findall(r'\d+', rule_id)
+        if len(update_id) > 0:
+            update_id=update_id[0]
+        print("positive update_id:", update_id)
+        return need_add, need_update, histories, update_id, rule
+    return need_add, need_update, histories, None, rule
+
+
 def get_fuzzy(chat_history, rules, platform=None, pid=None, max_iid=-1):
     '''
     模糊匹配算法：分析对话历史，生成个性化规则操作建议
@@ -265,48 +320,117 @@ def get_fuzzy(chat_history, rules, platform=None, pid=None, max_iid=-1):
         # 返回空响应和操作列表（表示需要执行操作而非普通对话）
         return "", actions
     
-    # 情况2：用户表达"想看"的需求
+    # 情况2：用户表达“想看”的需求
     elif has_likes:
-        # 分析新需求与现有规则的关联性
-        analyse, histories = get_analyse_rules(rules_str.strip(), count, histories, needs)
-        
-        # 获取规则矛盾处理建议（删除或更新）
-        need_del, need_update, operate_id, new_rule = get_contradiction_rules(histories, needs)
-        
-        # 处理删除规则的情况
-        if need_del:
-            actions = [{
-                "type": 3,  # 类型3：删除规则
-                "profile": {
-                    "iid": id_to_iid[int(operate_id)-1],  # 要删除的规则ID
-                    "platform": platform, 
-                    "rule": rules[int(operate_id)-1]['fields']['rule'],  # 原规则内容
-                    "pid": pid, 
-                    "isactive": False  # 设置为不激活（相当于删除）
-                }, 
-                'keywords': []
-            }]
-        # 处理更新规则的情况
-        elif need_update:  # FIXME:elif need_update and (update_id is not None):
-            actions = [{
-                "type": 2,  # 类型2：更新规则
-                "profile": {
-                    "iid": id_to_iid[int(operate_id)-1],  # 要更新的规则ID
-                    "platform": platform, 
-                    "rule": new_rule,  # 更新后的规则内容
-                    "pid": pid, 
-                    "isactive": True
-                }, 
-                'keywords': []
-            }]
+        # 将规则分为负向和正向两组，分别处理
+        negative_rules = []
+        negative_id_to_iid = []
+        positive_rules = []
+        positive_id_to_iid = []
+        for i, rule in enumerate(rules):
+            r = rule['fields']
+            if r['rule'].startswith("我不想看"):
+                negative_rules.append(r)
+                negative_id_to_iid.append(r['iid'])
+            elif r['rule'].startswith("我想看"):
+                positive_rules.append(r)
+                positive_id_to_iid.append(r['iid'])
+
+        actions = []
+
+        # Step A: 矛盾处理 — 检查是否需要删除/更新冲突的负向规则
+        if negative_rules:
+            neg_rules_str = ""
+            for i, r in enumerate(negative_rules):
+                neg_rules_str += f"{i+1}." + r['rule'] + "\n"
+            histories_neg = list(histories)  # fork histories
+            analyse, histories_neg = get_analyse_rules(neg_rules_str.strip(), len(negative_rules), histories_neg, needs)
+            try:
+                need_del, need_update, operate_id, new_rule = get_contradiction_rules(histories_neg, needs)
+                if need_del:
+                    actions.append({
+                        "type": 3,
+                        "profile": {
+                            "iid": negative_id_to_iid[int(operate_id)-1],
+                            "platform": platform,
+                            "rule": negative_rules[int(operate_id)-1]['rule'],
+                            "pid": pid,
+                            "isactive": False
+                        },
+                        'keywords': []
+                    })
+                elif need_update:
+                    actions.append({
+                        "type": 2,
+                        "profile": {
+                            "iid": negative_id_to_iid[int(operate_id)-1],
+                            "platform": platform,
+                            "rule": new_rule,
+                            "pid": pid,
+                            "isactive": True
+                        },
+                        'keywords': []
+                    })
+            except Exception as e:
+                logger.warning("矛盾处理异常: %s", e)
+
+        # Step B: 正向规则 — 新增或更新“我想看”规则
+        if positive_rules:
+            # 有已有正向规则，需要分析关联性后决定新增还是更新
+            histories_pos = list(histories)  # fork histories
+            pos_rules_str = ""
+            for i, r in enumerate(positive_rules):
+                pos_rules_str += f"{i+1}." + r['rule'] + "\n"
+            analyse, histories_pos = get_analyse_rules(pos_rules_str.strip(), len(positive_rules), histories_pos, needs)
+
+            try:
+                need_add, need_update, histories_pos, update_id, new_rule = get_change_positive_rules(histories_pos, needs)
+                if need_add:
+                    actions.append({
+                        "type": 1,
+                        "profile": {
+                            "iid": next_iid,
+                            "platform": platform,
+                            "rule": new_rule,
+                            "pid": pid,
+                            "isactive": True
+                        },
+                        'keywords': []
+                    })
+                elif need_update and (update_id is not None):
+                    actions.append({
+                        "type": 2,
+                        "profile": {
+                            "iid": positive_id_to_iid[int(update_id)-1],
+                            "platform": platform,
+                            "rule": new_rule,
+                            "pid": pid,
+                            "isactive": True
+                        },
+                        'keywords': []
+                    })
+            except Exception as e:
+                logger.error("正向规则生成异常: %s", e)
         else:
-            # 错误处理：有需求但无法生成操作
-            actions = []
-            logger.error("fuzzy 有想看需求 但是 没有删除或者更新")
+            # 没有已有正向规则，直接新增
+            new_rule = needs.replace("用户想看", "我想看") if needs.startswith("用户想看") else "我想看" + needs
+            actions.append({
+                "type": 1,
+                "profile": {
+                    "iid": next_iid,
+                    "platform": platform,
+                    "rule": new_rule,
+                    "pid": pid,
+                    "isactive": True
+                },
+                'keywords': []
+            })
+
+        if not actions:
+            logger.error("fuzzy 有想看需求 但是 没有生成任何操作")
             response = get_common_response(chat_history)
             return response, []
-        
-        # 返回空响应和操作列表
+
         return "", actions
     
     # 情况3：没有明确的"想看"或"不想看"需求

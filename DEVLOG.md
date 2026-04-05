@@ -5,6 +5,21 @@
 2. 对话函数，根据对话历史生成下一条
 3. 重排序和过滤函数，api根据对话
 
+## 2026-04-05 对话函数支持正向规则生成
+
+### 背景
+`fuzzy.py` 的 `get_fuzzy()` 在 `has_likes` 分支中，原来只调 `get_contradiction_rules` 处理与已有负向规则的矛盾(删除/更新)，不会创建正向规则("我想看xx")。导致正向偏好无法持久化到 Rule 表，`/reorder` 的重排阶段 positive_group 永远为空。
+
+### 修改内容 (`agent/prompt/fuzzy.py`)
+- 新增 `CHANGE_POSITIVE_RULES_PROMPT`: 类似 `CHANGE_RULES_PROMPT`，但规则以"我想看"开头，用于决定新增还是更新正向规则。
+- 新增 `get_change_positive_rules()`: 类似 `get_change_rules()`，解析 LLM 返回的新增/更新正向规则指令。
+- 重写 `has_likes` 分支为两步处理:
+  - Step A (矛盾处理): 将规则分为 negative/positive 两组，只传 negative 子集给 `get_analyse_rules` + `get_contradiction_rules`，用独立 histories_neg 避免上下文污染。
+  - Step B (正向规则): 如果已有正向规则，传 positive 子集给 `get_analyse_rules` + `get_change_positive_rules`；如果没有已有正向规则，直接从 needs 转换为"我想看xx"格式新增。
+  - 合并两步的 actions 返回。
+- `has_dislikes` 分支保持不变。
+- 前端 ChangeProfile、save_rules、views.py 均已支持"我想看"前缀，无需改动。
+
 ## 2026-04-05 重写过滤/重排 prompt + 平台编号调整 + 日志精简
 
 ### 参考 offline prompt 重写 online prompts.py
