@@ -76,6 +76,13 @@ const Chatbot = (
     //处理加载过慢问题
     const [loading, setLoading] = useState(false);
 
+    // Helper function to get current session's platform
+    const getCurrentSessionPlatform = () => {
+        if (nowsid === -1) return 0; // Default to Toutiao for new sessions
+        const currentSession = allSessions.find(s => s.sid === nowsid);
+        return currentSession ? currentSession.platform : 0;
+    };
+
     const addSession = () => {
         console.log("add session");
         setShowSession(false);
@@ -332,6 +339,7 @@ const Chatbot = (
                 setAction={setAction}
                 setActionMessage={setChatHistory}
                 sid={nowsid}
+                platform={getCurrentSessionPlatform()}
                 setEnabled = {setEnabled}
                 setLoading = {setLoading}
             />
