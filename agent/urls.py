@@ -5,6 +5,7 @@ from .views import *
 urlpatterns = [
     path("browse", browse),
     path("click", click),
+    path("reorder", reorder),
     path("chatbot", dialogue),
     # path("chatbot/report", report),
     path("chatbot/get_sessions", get_sessions),

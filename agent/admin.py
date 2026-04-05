@@ -13,8 +13,8 @@ from .models import *
 
 
 class RecordAdmin(admin.ModelAdmin):
-    list_display = ('pid', 'title', 'filter_result', 'browse_time', 'click', 'click_time','is_filter', 'filter_reason')
-    list_filter = ['pid', 'filter_result', 'click', 'browse_time', 'click_time']
+    list_display = ('pid', 'platform','title', 'filter_result', 'browse_time', 'click', 'click_time','is_filter', 'filter_reason','content')
+    list_filter = ['pid', 'platform','filter_result', 'click', 'browse_time', 'click_time']
     search_fields = ['title', 'content', 'context', 'filter_reason']
     fieldsets = [
         ('交互信息', {'fields': ['pid', 'title', 'content', 'click']}),

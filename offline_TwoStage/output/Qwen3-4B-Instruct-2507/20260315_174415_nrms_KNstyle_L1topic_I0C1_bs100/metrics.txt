@@ -1,0 +1,10 @@
+Mode: Interpret=False, Controll=True, Polarity=positive
+Baseline: [nrms] /mnt/sh/mmvision/home/zijiexin/project/other_VidLLM/RS-lyt/baseline/nrms/output/20260315_135237/best_samples.json
+Batch: 100, Skipped: 0
+
+Metric           nrms   MultiAgent      Delta
+---------------------------------------------
+AUC            0.6572       0.7683 +   0.1111
+MRR            0.3464       0.4937 +   0.1473
+NDCG@5         0.3656       0.5288 +   0.1632
+NDCG@10        0.4529       0.5776 +   0.1247

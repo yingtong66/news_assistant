@@ -13,6 +13,40 @@ from .prompt.fuzzy import get_fuzzy
 from .prompt.alignment import get_simple_personalities_from_browses, get_simple_personalities_from_clicks
 
 from .utils import build_response, feedback_to_response, get_his_message_str,get_browses_wc, get_clicks_wc
+from pypinyin import lazy_pinyin
+
+
+# 提取标题首字的排序键：中文取拼音首字母，英文取首字母，其他排到最后
+def extract_first_letter_for_sort(title):
+    title = title.strip()
+    if not title:
+        return 'zzz'
+    first_char = title[0]
+    if first_char.isascii() and first_char.isalpha():
+        return first_char.lower()
+    py = lazy_pinyin(first_char)
+    if py and py[0]:
+        return py[0][0].lower()
+    return 'zzz'
+
+
+# 按标题首字母排序，返回重排后的 id 列表
+def reorder_by_first_letter(items):
+    items_sorted = sorted(items, key=lambda item: extract_first_letter_for_sort(item.get('title', '')))
+    return [item.get('id') for item in items_sorted]
+
+
+def reorder(request):
+    if request.method == 'POST':
+        params = json.loads(request.body)
+        pid = params.get('pid', '')
+        platform_idx = params.get('platform', 0)
+        platform = PLATFORM_CHOICES[platform_idx][0]
+        items = params.get('items', [])
+        from online_TwoStage.pipeline import run_two_stage_reorder
+        order = run_two_stage_reorder(pid, platform, items)
+        return build_response(SUCCESS, {"order": order})
+    return build_response(FAILURE, None)
 
 
 def browse(request): #ok 需要改这个！
@@ -65,6 +99,8 @@ def click(request): #ok
                                             platform=PLATFORM_CHOICES[params['platform']][0],
                                             title=params['title']).order_by('-browse_time').first()
 
+        if interaction is None:
+            return build_response(FAILURE, None)
         interaction.click = True
         interaction.save()
         return build_response(SUCCESS, None)
@@ -589,8 +625,10 @@ def record_user(request): #ok
 
 
 # 后面是用一个定时任务计算每个人的personalities
+
+# 被 Django 导入时就会执行：初始化 BackgroundScheduler、注册 job 并 scheduler.start()。通常在服务启动/第一次加载 views 时就会触发。
+
 # # 临时注释APScheduler初始化代码，避免在数据库表创建前访问数据库
-# '''
 from apscheduler.schedulers.background import BackgroundScheduler
 from django_apscheduler.jobstores import DjangoJobStore, register_events
 from apscheduler.triggers.interval import IntervalTrigger
@@ -671,4 +709,3 @@ register_events(scheduler)
 scheduler.start()
 # Hook into the apscheduler shutdown to delete old job executions
 scheduler.add_listener(delete_old_job_executions, mask=2048)
-# '''
