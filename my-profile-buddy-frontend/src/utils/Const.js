@@ -9,7 +9,7 @@ export const platformOptions = [
     },
     {
         value: 2,
-        label: '微博'
+        label: '头条'
     }
 ]
 

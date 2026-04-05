@@ -127,9 +127,9 @@ const Profile = (
     }, [location]);
     // 点击保存之后， 先更新sever数据库，更新chrome数据库
     async function updateCard(id, item, index) {
-        //需要check一下是不是以"我不想看"开头
-        if(item.rule.indexOf("我不想看")!==0){
-            alert("不行,重写! 规则必须以\"我不想看\"开头");
+        //需要check一下是不是以"我不想看"或"我想看"开头
+        if(item.rule.indexOf("我不想看")!==0 && item.rule.indexOf("我想看")!==0){
+            alert("不行,重写! 规则必须以\"我不想看\"或\"我想看\"开头");
             return;
         }
         const newData = nowData.map(card => card.iid === id ? item : card);

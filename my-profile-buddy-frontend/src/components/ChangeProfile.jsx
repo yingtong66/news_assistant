@@ -375,8 +375,8 @@ const ChangeProfile = (
         setAction(actionData.map((itemm, id) => index === id ? {...itemm, keywords:kw} : itemm));
     }
     function setActionItemRU(new_rule, index){
-        if(new_rule.indexOf("我不想看")!==0){
-            alert("不行,重写! 规则必须以\"我不想看\"开头");
+        if(new_rule.indexOf("我不想看")!==0 && new_rule.indexOf("我想看")!==0){
+            alert("不行,重写! 规则必须以\"我不想看\"或\"我想看\"开头");
             return;
         }
         setAction(actionData.map((itemm, id) => index === id ? {...itemm, profile: {...itemm.profile, rule:new_rule}} : itemm));

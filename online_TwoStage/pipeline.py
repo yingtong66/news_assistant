@@ -45,23 +45,29 @@ def run_filtering(items, negative_group):
 
     prompt = FILTERING_PROMPT.format(negative_group=rules_text, items=items_text)
     msg = [{"role": "user", "content": prompt}]
-    logger.info("[TwoStage] 过滤请求: %d 个候选, %d 条规则", len(items), len(negative_group))
+    logger.info("[TwoStage-过滤] 输入 %d 个候选, 规则: %s", len(items), negative_group)
 
     response_text = get_bailian_response(msg)
-    logger.info("[TwoStage] 过滤响应: %s", response_text[:500])
+    # logger.info("[TwoStage-过滤] LLM原始响应:\n%s", response_text)
 
     result = parse_json_from_response(response_text)
     if result is None:
-        logger.warning("[TwoStage] 过滤响应解析失败，回退全量")
+        logger.warning("[TwoStage-过滤] 响应解析失败，回退全量保留 %d 条", len(items))
         return items, []
 
     filtered_list = result.get('filtered_list', [])
     removed_list = result.get('removed_list', [])
 
-    # 保底: 过滤后数量 < 70% 则回退全量
-    if len(filtered_list) < len(items) * 0.7:
-        logger.warning("[TwoStage] 过滤过多 (%d/%d < 70%%)，回退全量", len(filtered_list), len(items))
-        return items, []
+    # LLM 可能把同一条目同时放进 filtered_list 和 removed_list，用 removed_ids 剔除
+    removed_ids_set = set(str(item.get('id', '')) for item in removed_list)
+    filtered_list = [item for item in filtered_list if str(item.get('id', '')) not in removed_ids_set]
+
+    logger.info("[TwoStage-过滤] 结果: 保留 %d 条, 移除 %d 条", len(filtered_list), len(removed_list))
+
+    # [已禁用] 保底: 过滤后数量 < 70% 则回退全量
+    # if len(filtered_list) < len(items) * 0.7:
+    #     logger.warning("[TwoStage-过滤] 过滤过多 (%d/%d < 70%%)，回退全量", len(filtered_list), len(items))
+    #     return items, []
 
     return filtered_list, removed_list
 
@@ -76,17 +82,18 @@ def run_reranking(items, positive_group):
 
     prompt = RERANKING_PROMPT.format(positive_group=pos_text, items=items_text)
     msg = [{"role": "user", "content": prompt}]
-    logger.info("[TwoStage] 重排请求: %d 个候选", len(items))
+    logger.info("[TwoStage-重排] 输入 %d 个候选, 偏好: %s", len(items), positive_group if positive_group else "(无)")
 
     response_text = get_bailian_response(msg)
-    logger.info("[TwoStage] 重排响应: %s", response_text[:500])
+    # logger.info("[TwoStage-重排] LLM原始响应:\n%s", response_text)
 
     result = parse_json_from_response(response_text)
     if result is None:
-        logger.warning("[TwoStage] 重排响应解析失败，保持原序")
+        logger.warning("[TwoStage-重排] 响应解析失败，保持原序 %d 条", len(items))
         return [item.get('id') for item in items]
 
     rerank_list = result.get('rerank_list', [])
+    logger.info("[TwoStage-重排] 结果: 输出 %d 条 (期望 %d 条)", len(rerank_list), len(items))
     return [str(item.get('id', '')) for item in rerank_list]
 
 
@@ -95,11 +102,11 @@ def run_two_stage_reorder(pid, platform, items):
     if not items:
         return []
 
-    # 查询用户的 active 规则作为 negative_group
+    logger.info("[TwoStage] === 开始两阶段重排 === pid=%s, platform=%s, 候选数=%d", pid, platform, len(items))
     rules = Rule.objects.filter(pid=pid, platform=platform, isactive=True)
-    negative_group = [r.rule for r in rules]
-    # positive_group 暂为空，等第1/2部分实现
-    positive_group = []
+    # 按规则前缀分为负向（过滤）和正向（重排）
+    negative_group = [r.rule for r in rules if r.rule.startswith("我不想看")]
+    positive_group = [r.rule for r in rules if r.rule.startswith("我想看")]
 
     all_ids = [str(item.get('id', '')) for item in items]
 
@@ -116,26 +123,38 @@ def run_two_stage_reorder(pid, platform, items):
     # 阶段2: 重排
     reranked_ids = run_reranking(items_for_rerank, positive_group)
 
+    # 构建 id -> title 映射，用于最终日志
+    id_to_title = {str(item.get('id', '')): item.get('title', '') for item in items}
+
     # 兜底: 去重 + 补齐缺失 + 被过滤的追加末尾
     seen = set()
-    final_order = []
+    rerank_order = []
     for rid in reranked_ids:
         rid = str(rid)
-        if rid not in seen:
+        if rid not in seen and rid not in removed_ids:
             seen.add(rid)
-            final_order.append(rid)
+            rerank_order.append(rid)
 
     # 补齐重排中遗漏的（非 removed 的）
     for rid in all_ids:
         if rid not in seen and rid not in removed_ids:
             seen.add(rid)
-            final_order.append(rid)
+            rerank_order.append(rid)
 
     # 被过滤掉的追加到末尾
+    removed_order = []
     for rid in all_ids:
         if rid not in seen:
             seen.add(rid)
-            final_order.append(rid)
+            removed_order.append(rid)
 
-    logger.info("[TwoStage] 最终排序: %d 个, 其中 %d 个被过滤排末尾", len(final_order), len(removed_ids))
+    final_order = rerank_order + removed_order
+
+    logger.info("[TwoStage] === 完成 === 共 %d 条", len(final_order))
+    logger.info("[TwoStage] rerank_list (%d 条):", len(rerank_order))
+    for i, rid in enumerate(rerank_order, 1):
+        logger.info("  %d. id=%s title=%s", i, rid, id_to_title.get(rid, ''))
+    logger.info("[TwoStage] removed_list (%d 条, 排末尾):", len(removed_order))
+    for i, rid in enumerate(removed_order, 1):
+        logger.info("  %d. id=%s title=%s", i, rid, id_to_title.get(rid, ''))
     return final_order

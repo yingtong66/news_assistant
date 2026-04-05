@@ -174,28 +174,28 @@ async function processElement(element, platform=0) {
       // }
     }
 
-    // 上下文过滤
-    const isOpen = await getIsOpen();
-    const jsonData = JSON.stringify({ pid: userPid, platform: platform, title: title, content: content, url: url, is_filter: isOpen});
-    try {
-      const data = await sendBackgroundRequest("build_request_browse", jsonData);
-      if (data?.data === true) {
-        // element.style.backgroundColor = '#d3d3d3';
-        element.remove();
-        console.log("remove:" + title);
-      }
-      console.log("processing one:" + title);
-      if (isOpen === true) {
-        var add_label_div = element.querySelector('.ContentItem-title').firstChild;
-        var label = document.createElement('label');
-        label.classList.add("FEfUrdfMIKpQDJDqkjte");
-        label.innerHTML = '??????';
-        label.style.backgroundColor = 'rgb(146, 207, 191)';
-        add_label_div.insertAdjacentElement('beforeend', label);
-      }
-    } catch (err) {
-      console.warn("browse request failed", err);
-    }
+    // [已禁用] 逐条过滤已移除，统一由 /reorder 批量处理
+    // const isOpen = await getIsOpen();
+    // const jsonData = JSON.stringify({ pid: userPid, platform: platform, title: title, content: content, url: url, is_filter: isOpen});
+    // try {
+    //   const data = await sendBackgroundRequest("build_request_browse", jsonData);
+    //   if (data?.data === true) {
+    //     // element.style.backgroundColor = '#d3d3d3';
+    //     element.remove();
+    //     console.log("remove:" + title);
+    //   }
+    //   console.log("processing one:" + title);
+    //   if (isOpen === true) {
+    //     var add_label_div = element.querySelector('.ContentItem-title').firstChild;
+    //     var label = document.createElement('label');
+    //     label.classList.add("FEfUrdfMIKpQDJDqkjte");
+    //     label.innerHTML = '??????';
+    //     label.style.backgroundColor = 'rgb(146, 207, 191)';
+    //     add_label_div.insertAdjacentElement('beforeend', label);
+    //   }
+    // } catch (err) {
+    //   console.warn("browse request failed", err);
+    // }
 }
 
 
@@ -243,7 +243,7 @@ async function reorderNewNodes(options, nodes) { //把新插入的卡片发给�
 
   // 构造发送给后端的 items 列表（id 用索引表示，title 用于后端计算）
   const items = liveNodes.map((node, index) => ({
-    id: String(index),
+    id: String(index + 1),
     title: getTitleForItem(node) || "",
   }));
 
@@ -255,7 +255,7 @@ async function reorderNewNodes(options, nodes) { //把新插入的卡片发给�
   // 建立 id 到节点的映射，方便按新顺序取回节点
   const idToNode = {};
   liveNodes.forEach((node, index) => {
-    idToNode[String(index)] = node;
+    idToNode[String(index + 1)] = node;
   });
 
   // 记录每个节点原本后面的锚点，重排后尽量插回原位置区间
