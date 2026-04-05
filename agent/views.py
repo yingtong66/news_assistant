@@ -487,6 +487,7 @@ def make_new_message(request): #ok
         # 验证会话是否存在
         now_session = Session.objects.filter(id=sid, pid=pid, platform=platform)
         if len(now_session) == 0:
+            logger.error("[make_new_message] 找不到会话: sid=%s, pid=%s, platform=%s", sid, pid, platform)
             return build_response(FAILURE, None)
         now_session = now_session.first()
         

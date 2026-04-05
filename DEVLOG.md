@@ -5,6 +5,28 @@
 2. 对话函数，根据对话历史生成下一条
 3. 重排序和过滤函数，api根据对话
 
+## 2026-04-05 项目重命名 + prompt 修正 + make_new_message 调试
+
+### 项目重命名: PersonaBuddy -> news_assistant
+- 目录 `PersonaBuddy/` 重命名为 `news_assistant/`。
+- 所有文件中的 `PersonaBuddy` 引用替换为 `news_assistant`（manage.py, settings.py, wsgi.py, asgi.py, urls.py, rah.py, check_filter_item.py, eval_new.py, manifest.json, CLAUDE.md, README.md, 0_Explain_ALL.md, DEVLOG.md）。
+
+### 过滤/重排 prompt 修正 (`online_TwoStage/prompts.py`)
+- 过滤 prompt: "只要沾边就移除，宁可多过滤" 改为 "主题必须直接属于规则类别才移除，不确定时保留"。增加示例说明（如"体育规则不该移除碰巧提到运动员的政治新闻"）。修复军事新闻被"不想看体育"误杀的问题。
+- 重排 prompt: "按相关性排序，不相关排末尾" 改为 "只有明确匹配偏好的才提前，其余保持原序；无匹配时完全保持原序"。修复候选中无科技新闻时 LLM 把军事/政治排前面的问题。
+
+### pipeline.py 日志增强
+- rerank_list 前输出正向规则，removed_list 前输出负向规则，方便对照验证。
+
+### HAS_ACTION_PROMPT 修复 (`agent/prompt/fuzzy.py`)
+- 从"根据对话内容"改为"请你仅根据用户最后一条消息来判断"。修复 LLM 重复分析历史轮次已处理的偏好（如之前加过的"我想看科技新闻"）。
+
+### REPONSE prompt 重写 (`agent/prompt/prompt_utils.py`)
+- 从窄定位"探索用户不愿意看什么内容"改为通用助手角色：处理规则查询、闲聊、功能引导。修复用户问"我现在有哪些规则"时仍回复"您还希望过滤哪些类型的内容呢？"的问题。
+
+### make_new_message 调试
+- 点击弹窗确认后消息不显示。排查发现 `/make_new_message` 返回 FAILURE（26字节），session 查询失败。添加 `[make_new_message]` 错误日志输出 sid/pid/platform，待进一步确认原因。
+
 ## 2026-04-05 对话函数支持正向规则生成 + 日志简化 + 规则查询
 
 ### 正向规则生成 (`agent/prompt/fuzzy.py`)

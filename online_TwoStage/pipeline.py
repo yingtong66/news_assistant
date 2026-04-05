@@ -151,9 +151,11 @@ def run_two_stage_reorder(pid, platform, items):
     final_order = rerank_order + removed_order
 
     logger.info("[TwoStage] === 完成 === 共 %d 条", len(final_order))
+    logger.info("[TwoStage] 正向规则: %s", positive_group if positive_group else "(无)")
     logger.info("[TwoStage] rerank_list (%d 条):", len(rerank_order))
     for i, rid in enumerate(rerank_order, 1):
         logger.info("  %d. id=%s title=%s", i, rid, id_to_title.get(rid, ''))
+    logger.info("[TwoStage] 负向规则: %s", negative_group if negative_group else "(无)")
     logger.info("[TwoStage] removed_list (%d 条, 排末尾):", len(removed_order))
     for i, rid in enumerate(removed_order, 1):
         logger.info("  %d. id=%s title=%s", i, rid, id_to_title.get(rid, ''))
