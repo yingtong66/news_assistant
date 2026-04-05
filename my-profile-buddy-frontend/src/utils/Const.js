@@ -1,15 +1,15 @@
 export const platformOptions = [
     {
         value: 0,
-        label: '知乎'
+        label: '头条'
     },
     {
         value: 1,
-        label: 'B站'
+        label: '知乎'
     },
     {
         value: 2,
-        label: '头条'
+        label: 'B站'
     }
 ]
 

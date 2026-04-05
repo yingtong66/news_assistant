@@ -5,6 +5,29 @@
 2. 对话函数，根据对话历史生成下一条
 3. 重排序和过滤函数，api根据对话
 
+## 2026-04-05 重写过滤/重排 prompt + 平台编号调整 + 日志精简
+
+### 参考 offline prompt 重写 online prompts.py
+- 过滤 prompt：去掉"保守过滤"、"明确违反"、"70%保底"等约束，改为"只要与规则沾边或相关就移除，宁可多过滤不要漏掉"。增加 filtered_list 和 removed_list 不能重复的要求。
+- 重排 prompt：明确"不是过滤器，不能删除"，不确定时保持原序，不相关条目排末尾。
+- 参考了 `offline_TwoStage/prompt/filtering.yaml` 和 `reranking.yaml` 的结构和措辞。
+
+### 平台编号调整：头条=0（默认）, 知乎=1, B站=2
+- 后端 `agent/const.py` 的 `PLATFORM_CHOICES` 顺序改为 头条/知乎/B站。
+- 前端 `Const.js` 的 `platformOptions` 同步调整。
+- `zhihu.js` 中 setupClickListener (3处)、processElement 判断 (3处)、feedConfigs (3处) 共 9 处平台编号更新。
+- 头条作为当前测试重点，设为默认值 0。
+
+### pipeline.py 日志精简
+- 注释掉过滤和重排两处 LLM 原始响应的完整打印（冗余，最终结果已有清晰输出）。
+- 去掉过滤阶段逐条 "移除: id=x title=xxx" 的日志。
+- 最终输出分 rerank_list 和 removed_list 两部分，带序号和标题，清晰展示结果。
+
+### 修复 LLM 返回重复条目问题
+- LLM 可能把同一条目同时放进 filtered_list 和 removed_list（如保留20+移除4=24条）。
+- 在 `run_filtering` 中用 `removed_ids_set` 从 `filtered_list` 剔除重复。
+- 在 `run_two_stage_reorder` 的兜底逻辑中，构建 `rerank_order` 时也排除 `removed_ids`，保证两部分互斥且并集为全部条目。
+
 ## 2026-04-05 生成 requirements.txt
 
 - 用 `pip freeze` 导出当前 `.venv/` 虚拟环境的完整依赖到 `requirements.txt`，替换之前不完整的版本。

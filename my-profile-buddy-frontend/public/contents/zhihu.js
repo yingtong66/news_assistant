@@ -76,7 +76,7 @@ window.addEventListener('load', function () {
   setupClickListener({
     host: "www.zhihu.com",
     containerSelector: ".Topstory-recommend", //".css-1fsnuue",
-    platform: 0,
+    platform: 1,
     getTitle: (event) => {
       let target = event.target;  // 用户点击的元素
       if (target.tagName === 'A' &&
@@ -98,7 +98,7 @@ window.addEventListener('load', function () {
   setupClickListener({
     host: "www.bilibili.com",
     containerSelector: ".recommended-container_floor-aside",
-    platform: 1,
+    platform: 2,
     getTitle: (event) => {
       let target = event.target;  // 用户点击的元素
       if (target.tagName === 'A' && target.getAttribute('data-idx') === 'click' ) { 
@@ -116,7 +116,7 @@ window.addEventListener('load', function () {
   setupClickListener({
     host: "www.toutiao.com",
     containerSelector: ".ttp-feed-module",
-    platform: 2,
+    platform: 0,
     getTitle: (event) => {
       let target = event.target;
       const card = target.closest('.feed-card-wrapper.feed-card-article-wrapper');
@@ -137,7 +137,7 @@ async function processElement(element, platform=0) {
     let content = ""
     let url = ""
 
-    if(platform === 0){ //知乎
+    if(platform === 1){ //知乎
         // 获取标题
         const title_tag = element.querySelector(".ContentItem-title");
         title = title_tag.innerText;
@@ -149,12 +149,12 @@ async function processElement(element, platform=0) {
         url = url_tag.querySelector("a").href
     }
 
-    else if(platform ===1){ //B站
+    else if(platform ===2){ //B站
       const title_tag = element.querySelector(".bili-video-card__info--tit")
       title = title_tag.getAttribute("title")
     }
 
-    else if(platform === 2){ //头条
+    else if(platform === 0){ //头条
       const a =
         element.querySelector(".feed-card-article a[aria-label]") ||
         element.querySelector(".feed-card-article a") ||
@@ -443,7 +443,7 @@ window.addEventListener('load', function () {
       url: "https://www.zhihu.com/",
       initialSelector: ".Card.TopstoryItem.TopstoryItem-isRecommend",
       containerSelector: ".Topstory-recommend",//".css-1fsnuue",
-      platform: 0,
+      platform: 1,
       getTitleForItem: getZhihuTitleFromCard,
       reorderKey: "zhihu",
     },
@@ -451,7 +451,7 @@ window.addEventListener('load', function () {
       url: "https://www.bilibili.com/",
       initialSelector: ".feed-card",
       containerSelector: ".recommended-container_floor-aside",
-      platform: 1,
+      platform: 2,
       getTitleForItem: getBilibiliTitleFromCard,
       reorderKey: "bilibili",
     },
@@ -459,7 +459,7 @@ window.addEventListener('load', function () {
       url: "https://www.toutiao.com/",
       initialSelector: ".feed-card-wrapper.feed-card-article-wrapper",
       containerSelector: ".ttp-feed-module > div:not(.main-nav-wrapper)",
-      platform: 2,
+      platform: 0,
       getTitleForItem: getToutiaoTitleFromCard,
       reorderKey: "toutiao",
     },
