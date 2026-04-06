@@ -8,6 +8,6 @@ agent/personalities/*.gml
 */__pycache__/*
 *.log
 logs/*
-.venv/*
-.claude/*
+.venv
+.claude
 .output

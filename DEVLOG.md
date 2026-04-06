@@ -1,6 +1,11 @@
 # DEVLOG
 
-## 2026-04-06 引导对话系列 Bug 修复
+## 2026-04-06 引导对话系列 Bug 修复（续）
+
+### 修复5：对话显示规则与已有规则不一致
+- 问题：`guided_chat_summarize` 的无 actions 分支重新调 `get_common_response(chat_history)`，未传规则上下文，LLM 回复"过滤规则：暂无"，与实际规则不符
+- 修复：直接使用 `get_fuzzy` 返回的 `response`（其 else 分支内部已将规则拼入上下文再调 LLM），去掉多余的 `get_common_response` import
+
 
 ### 修复1：guided_chat_summarize 缺少 Session，make_new_message 报错
 - 问题：`/guided_chat/summarize` 没有创建 Session，`nowsid` 始终为 `-1`，用户确认规则后 `/make_new_message` 找不到会话报错
