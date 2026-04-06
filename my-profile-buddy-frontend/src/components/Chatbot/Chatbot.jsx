@@ -111,7 +111,7 @@ const Chatbot = (
             fetch(`${backendUrl}/get_feedback`,{
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json', 
+                    'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({pid:userPid,  platform:0}),
             }).then(response => response.json())
@@ -124,6 +124,26 @@ const Chatbot = (
                 setLoading(false);
             });
         }
+    }
+
+    // 强制刷新历史偏好：清除缓存，重新运行三步LLM，并重置当前对话
+    const refreshPreference = () => {
+        setEnabled(false);
+        setLoading(true);
+        setNowSid(-1);
+        setGuidanceQuestion("");
+        setChatHistory([]);
+        fetch(`${backendUrl}/guided_chat/refresh?pid=${userPid}&platform=0`)
+        .then(response => response.json())
+        .then(data => {
+            const res_data = data['data'];
+            const q = res_data['guidance_question'];
+            setGuidanceQuestion(q);
+            setChatHistory([{sender: "bot", message: q, avatar: botAvatar}]);
+            setEnabled(true);
+            setLoading(false);
+        })
+        .catch((error) => { console.error('刷新偏好失败:', error); setEnabled(true); setLoading(false); });
     }
     //打开对话的显示
     useEffect(() => {
@@ -335,7 +355,7 @@ const Chatbot = (
                 width:"100%",
             }}
             >
-                <ChatHeader title={taskOptions[title]} clickMore={()=>{setShowSession(true)}}/>
+                <ChatHeader title={taskOptions[title]} clickMore={()=>{setShowSession(true)}} onRefresh={refreshPreference} showRefresh={title === 0}/>
                 <Spin spinning={loading}>
                 <Content class="chat-container">
                     <div class="chat-body" id="chat-body" ref={chatEndRef}>

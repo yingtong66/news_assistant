@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Flex, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
+import { Button, Flex, Input, List, Modal, Select, Spin, Tag, Tooltip, Typography } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
 import TextArea from 'antd/es/input/TextArea';
 import { Form } from 'antd';
 import Markdown from 'react-markdown';
@@ -15,26 +16,72 @@ import '../pages/Profile/Profile.css';
 const { Search } = Input;
 
 // 历史偏好展示区
-const HistoryPreference = ({ personalities, loading }) => {
-    // 展示用户历史偏好标签
-    const tags = personalities ? personalities.split(/[,，、]/).map(s => s.trim()).filter(Boolean) : [];
+const HistoryPreference = ({ personalities, loading, onRefresh }) => {
+    // 解析多行格式：只取 "- " 开头的行，区分正向/负向区块
+    const posTags = [];
+    const negTags = [];
+    if (personalities) {
+        let section = 'pos';
+        personalities.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed.includes('不感兴趣') || trimmed.includes('负向')) section = 'neg';
+            else if (trimmed.includes('偏好') || trimmed.includes('正向')) section = 'pos';
+            if (trimmed.startsWith('- ')) {
+                const text = trimmed.slice(2).trim();
+                if (text) (section === 'neg' ? negTags : posTags).push(text);
+            }
+        });
+    }
+    const hasAny = posTags.length > 0 || negTags.length > 0;
     return (
         <div style={{
             borderBottom: '1px solid #e8e8e8',
             padding: '10px 12px',
-            minHeight: 80,
             background: '#fafafa',
         }}>
-            <div style={{ fontWeight: 'bold', fontSize: 13, marginBottom: 6, color: '#555' }}>
-                历史偏好
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontWeight: 'bold', fontSize: 13, color: '#555', flex: 1 }}>历史偏好</span>
+                <Tooltip title="重新分析历史偏好">
+                    <Button
+                        type="text"
+                        size="small"
+                        icon={<ReloadOutlined />}
+                        loading={loading}
+                        onClick={onRefresh}
+                        style={{ color: '#1677ff' }}
+                    />
+                </Tooltip>
             </div>
             <Spin spinning={loading} size="small">
-                {tags.length > 0 ? (
-                    <Flex wrap="wrap" gap={4}>
-                        {tags.map((tag, i) => (
-                            <Tag key={i} color="blue" style={{ fontSize: 12 }}>{tag}</Tag>
-                        ))}
-                    </Flex>
+                {hasAny ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {/* 正向偏好 */}
+                        <div>
+                            <div style={{ fontSize: 11, color: '#1677ff', fontWeight: 'bold', marginBottom: 4 }}>正向偏好</div>
+                            {posTags.length > 0 ? (
+                                <Flex wrap="wrap" gap={4}>
+                                    {posTags.map((tag, i) => (
+                                        <Tag key={i} color="blue" style={{ fontSize: 12 }}>{tag}</Tag>
+                                    ))}
+                                </Flex>
+                            ) : (
+                                <Typography.Text type="secondary" style={{ fontSize: 11 }}>暂无</Typography.Text>
+                            )}
+                        </div>
+                        {/* 负向偏好 */}
+                        <div>
+                            <div style={{ fontSize: 11, color: '#ff4d4f', fontWeight: 'bold', marginBottom: 4 }}>负向偏好</div>
+                            {negTags.length > 0 ? (
+                                <Flex wrap="wrap" gap={4}>
+                                    {negTags.map((tag, i) => (
+                                        <Tag key={i} color="red" style={{ fontSize: 12 }}>{tag}</Tag>
+                                    ))}
+                                </Flex>
+                            ) : (
+                                <Typography.Text type="secondary" style={{ fontSize: 11 }}>暂无</Typography.Text>
+                            )}
+                        </div>
+                    </div>
                 ) : (
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         暂时还没有足够的浏览记录，继续使用后我会逐渐了解你的偏好～
@@ -153,6 +200,40 @@ const Dashboard = () => {
     const [chatLoading, setChatLoading] = useState(true);
     const [action, setAction] = useState([]);
     const [guidanceQuestion, setGuidanceQuestion] = useState('');
+
+    // 强制刷新历史偏好：清除缓存，重新运行三步LLM，并刷新聊天引导语
+    const refreshPreference = () => {
+        setPrefLoading(true);
+        setEnabled(false);
+        setChatLoading(true);
+        setNowSid(-1);
+        setChatHistory([]);
+        setGuidanceQuestion('');
+        fetch(`${backendUrl}/guided_chat/refresh?pid=${userPid}&platform=0`)
+            .then(r => r.json())
+            .then(data => {
+                const res = data['data'];
+                // 刷新偏好标签（从后端重新拉取）
+                fetch(`${backendUrl}/get_alignment`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pid: userPid, platform: 0 }),
+                })
+                    .then(r2 => r2.json())
+                    .then(data2 => {
+                        setPersonalities(data2['data']['personalities'] || '');
+                        setPrefLoading(false);
+                    })
+                    .catch(() => setPrefLoading(false));
+                // 刷新聊天引导语
+                const q = res['guidance_question'];
+                setGuidanceQuestion(q);
+                setChatHistory([{ sender: 'bot', message: q, avatar: botAvatar }]);
+                setEnabled(true);
+                setChatLoading(false);
+            })
+            .catch(() => { setPrefLoading(false); setEnabled(true); setChatLoading(false); });
+    };
     const chatEndRef = useRef(null);
     const title = 0; // 规则配置助手
 
@@ -318,7 +399,7 @@ const Dashboard = () => {
                 {/* 左列：历史偏好 + 聊天 */}
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, borderRight: '1px solid #e8e8e8', overflow: 'hidden' }}>
                     {/* 历史偏好 */}
-                    <HistoryPreference personalities={personalities} loading={prefLoading} />
+                    <HistoryPreference personalities={personalities} loading={prefLoading} onRefresh={refreshPreference} />
 
                     {/* 聊天框 */}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

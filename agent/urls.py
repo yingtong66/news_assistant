@@ -19,6 +19,7 @@ urlpatterns = [
     # path("get_word_count", get_word_count), # 这个是作词云用的,现在废弃了
     path("record_user", record_user),
     path("guided_chat/start", guided_chat_start),
+    path("guided_chat/refresh", guided_chat_refresh),
     path("guided_chat/summarize", guided_chat_summarize),
 ]
 

@@ -1,6 +1,57 @@
 # DEVLOG
 
-## 2026-04-06 引导对话系列 Bug 修复（续）
+## 2026-04-06 历史偏好模块：unit_interpret 接入引导流程
+
+### 新增 online_TwoStage/unit_interpret/ 模块
+
+参考 `offline_TwoStage/src/unit_interpret.py`，在 online 侧实现用户历史画像解释模块。
+
+**数据来源（与 offline 的差异）：**
+- 正样本：`Record.objects.filter(click=True)` — 点击过的记录（时间正序）
+- 负样本：`Record.objects.filter(click=False)` 最近 `max_neg=20` 条（曝光未点击）
+
+**三步流程（与 offline 一致）：**
+1. 全量正样本 → `LONG_TERM_PARSER_PROMPT` → 长期偏好
+2. 最近 5 条正样本 → `SHORT_TERM_PARSER_PROMPT` → 短期偏好
+3. 长期 + 短期 + 负样本 → `HISTORY_SUMMARY_PROMPT` → JSON `{positive_group, negative_group}`
+
+**LLM 调用**：复用 `agent/prompt/prompt_utils.get_bailian_response()`（dashscope/qwen），Prompt 使用纯字符串 `.format()` 风格（与 online 现有风格一致）。
+
+**新增文件：**
+- `online_TwoStage/unit_interpret/__init__.py`
+- `online_TwoStage/unit_interpret/prompts.py`：三条 prompt 常量
+- `online_TwoStage/unit_interpret/interpret.py`：`run_unit_interpret(pid, platform, max_neg=20)`
+
+### 接入 guided_chat_start（agent/views.py）
+
+**修改 `guided_chat_start()`**：
+
+旧逻辑：直接读 `Personalities.personality` 字段传给引导语生成函数。
+
+新逻辑：
+1. 查 `Personalities.update_time` 与最新 `Record.browse_time` 对比
+2. 有新数据 → 调 `run_unit_interpret()` → 格式化正/负偏好写回 `Personalities.personality`
+3. 无新数据 → 直接用缓存，避免重复调 3 次 LLM
+4. 传给 `get_guidance_question()` 生成个性化引导语
+
+**新增接口 `GET /guided_chat/refresh`**：强制清除 `Personalities` 缓存，重新运行三步 LLM，返回新引导语。注册路由 `guided_chat/refresh`。
+
+### 前端：Dashboard 历史偏好区刷新按钮
+
+**Dashboard.jsx 改动：**
+- `HistoryPreference` 组件新增 `onRefresh` prop，标题行右侧加 `ReloadOutlined` 图标按钮（hover tooltip：重新分析历史偏好）
+- 新增 `refreshPreference()` 函数：调 `/guided_chat/refresh` → 更新偏好标签 + 重置聊天引导语
+- 偏好标签解析改为只取 `- ` 开头的行，避免标题行变成 tag
+
+### 前端：历史偏好区 UI 重新设计
+
+**HistoryPreference 组件重构：**
+- 正向/负向偏好分区上下展示（`flex-direction: column`）
+- 正向偏好：蓝色小标题 + 蓝色 Tag
+- 负向偏好：红色小标题 + 红色 Tag
+- 无内容时各区显示"暂无"；完全无数据时显示默认提示文案
+
+
 
 ### 修复5：对话显示规则与已有规则不一致
 - 问题：`guided_chat_summarize` 的无 actions 分支重新调 `get_common_response(chat_history)`，未传规则上下文，LLM 回复"过滤规则：暂无"，与实际规则不符

@@ -15,6 +15,7 @@ from .prompt.alignment import get_simple_personalities_from_browses, get_simple_
 from .utils import build_response, feedback_to_response, get_his_message_str,get_browses_wc, get_clicks_wc
 from pypinyin import lazy_pinyin
 from online_TwoStage.unit_controll.dialog import get_guidance_question
+from online_TwoStage.unit_interpret import run_unit_interpret
 
 
 # 提取标题首字的排序键：中文取拼音首字母，英文取首字母，其他排到最后
@@ -648,7 +649,7 @@ def record_user(request): #ok
 
 
 def guided_chat_start(request):
-    """需求引导对话第一步：根据偏好摘要生成引导问题
+    """需求引导对话第一步：基于历史偏好总结生成个性化引导问题
     Args:
         request: GET 请求，参数为 pid, platform (数字索引)
     Returns:
@@ -658,14 +659,79 @@ def guided_chat_start(request):
     platform_idx = int(request.GET.get('platform', 0))
     platform = PLATFORM_CHOICES[platform_idx][0]
 
-    # 读取用户偏好摘要
-    preference_summary = ""
+    # 检查是否有新的浏览记录需要刷新偏好
     personality = Personalities.objects.filter(pid=pid, platform=platform).first()
-    if personality and personality.personality:
+    latest_record = Record.objects.filter(pid=pid, platform=platform).order_by('-browse_time').first()
+    need_refresh = (
+        personality is None
+        or latest_record is None
+        or latest_record.browse_time > personality.update_time
+    )
+
+    preference_summary = ""
+    if latest_record is not None and need_refresh:
+        # 有新数据，运行长短期偏好解析（3步LLM）
+        logger.info("[GuidedChat] 检测到新浏览记录，重新运行偏好总结 pid=%s", pid)
+        result, fallback = run_unit_interpret(pid, platform)
+        if not fallback:
+            pos = result.get("positive_group", [])
+            neg = result.get("negative_group", [])
+            parts = []
+            if pos:
+                parts.append("用户偏好（正向）：\n" + "\n".join("- " + p for p in pos))
+            if neg:
+                parts.append("用户不感兴趣（负向）：\n" + "\n".join("- " + n for n in neg))
+            preference_summary = "\n\n".join(parts)
+            # 写回 Personalities 缓存
+            if personality is None:
+                personality = Personalities(pid=pid, platform=platform)
+            personality.personality = preference_summary
+            personality.save()
+    elif personality and personality.personality:
+        # 无新数据，直接使用缓存
         preference_summary = personality.personality
+        logger.info("[GuidedChat] 使用缓存偏好 pid=%s\n%s", pid, preference_summary)
 
     guidance_question = get_guidance_question(preference_summary)
     logger.info("[GuidedChat] start: pid=%s, platform=%s, has_preference=%s", pid, platform, bool(preference_summary))
+    return build_response(SUCCESS, {
+        "guidance_question": guidance_question,
+        "has_preference": bool(preference_summary),
+    })
+
+
+def guided_chat_refresh(request):
+    """强制刷新用户历史偏好总结，清除缓存后重新运行 run_unit_interpret，并返回新的引导问题
+    Args:
+        request: GET 请求，参数为 pid, platform (数字索引)
+    Returns:
+        {guidance_question: str, has_preference: bool}
+    """
+    pid = request.GET.get('pid', '')
+    platform_idx = int(request.GET.get('platform', 0))
+    platform = PLATFORM_CHOICES[platform_idx][0]
+
+    logger.info("[GuidedChat] 强制刷新偏好 pid=%s platform=%s", pid, platform)
+
+    # 清除旧缓存，强制重新计算
+    Personalities.objects.filter(pid=pid, platform=platform).delete()
+
+    result, fallback = run_unit_interpret(pid, platform)
+    preference_summary = ""
+    if not fallback:
+        pos = result.get("positive_group", [])
+        neg = result.get("negative_group", [])
+        parts = []
+        if pos:
+            parts.append("用户偏好（正向）：\n" + "\n".join("- " + p for p in pos))
+        if neg:
+            parts.append("用户不感兴趣（负向）：\n" + "\n".join("- " + n for n in neg))
+        preference_summary = "\n\n".join(parts)
+        personality = Personalities(pid=pid, platform=platform, personality=preference_summary)
+        personality.save()
+
+    guidance_question = get_guidance_question(preference_summary)
+    logger.info("[GuidedChat] refresh 完成: pid=%s has_preference=%s", pid, bool(preference_summary))
     return build_response(SUCCESS, {
         "guidance_question": guidance_question,
         "has_preference": bool(preference_summary),
