@@ -1,6 +1,5 @@
 import React, {useEffect, useState}from "react";
 import { List, Button, Layout, Select, Flex, Form, Modal, Typography } from 'antd';
-import ChromeHeader from "../../components/ChromeHeader";
 import './Profile.css';
 import TextArea from "antd/es/input/TextArea";
 import { backendUrl, platformOptions, userPid } from "../../utils/Const";
@@ -192,7 +191,7 @@ const Profile = (
 
     return (
         <Layout className="layoutStyle">
-            <ChromeHeader title="已定义的规则"/>
+            <Typography.Title level={4} style={{margin:'8px 16px'}}>已定义的规则</Typography.Title>
             <Content className="contentStyle">
                 <List
                     grid={{gutter: 16, xs: 1,sm: 1, md: 1,lg: 1, xl: 1, xxl: 1}}

@@ -1,5 +1,10 @@
 async function getItem(key, defaultValue = false){
     console.log(key);
+    // 非插件环境降级到 localStorage
+    if (typeof chrome === 'undefined' || !chrome.storage) {
+      const raw = localStorage.getItem(key);
+      return raw !== null ? JSON.parse(raw) : defaultValue;
+    }
     return new Promise((resolve, reject) => {
       chrome.storage.sync.get(key, (result) => {
         if (chrome.runtime.lastError) {

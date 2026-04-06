@@ -56,6 +56,38 @@ npm run build # 生成 build/ 目录
 }
 ```
 
+## 前端文件结构 (my-profile-buddy-frontend/src/)
+
+### 入口
+- `index.js` — React 挂载点
+- `App.js` — 路由定义 + 插件开关逻辑
+
+### pages/（页面）
+| 文件 | 路由 | 说明 |
+|------|------|------|
+| `Dashboard.jsx` | `/home` | **主入口**：历史偏好标签 + 引导对话 + 规则列表三栏布局 |
+| `ProfileAlignment.jsx` | `/alignment` | 画像对齐对话（Chatbot title=1） |
+| `Feedback.jsx` | `/feedback` | 反馈对话（Chatbot title=2） |
+| `Profile/Profile.jsx` | `/profile` | 独立规则管理页（增删改查） |
+| `EmptyPage.jsx` | `/` | 插件关闭时的空白占位页 |
+
+### components/（组件）
+| 文件 | 说明 |
+|------|------|
+| `Chatbot/Chatbot.jsx` | 多 session 聊天组件，供 `/alignment`、`/feedback` 页面复用 |
+| `Chatbot/ChatHeader.jsx` | 聊天页顶部栏 |
+| `Chatbot/SessionList.jsx` | 历史会话列表抽屉 |
+| `Chatbot/Chatbot.css` | 聊天气泡样式（Dashboard 也复用） |
+| `ChangeProfile.jsx` | 规则确认弹窗：LLM 建议 → 用户确认 → 写入规则库 |
+| `StartButtion.jsx` | 插件顶部 On/Off 开关 |
+
+### utils/
+| 文件 | 说明 |
+|------|------|
+| `Const.js` | 全局常量：`backendUrl`、`userPid`、`platformOptions`、`taskOptions` |
+| `Chrome/getItem.js` | 从 `chrome.storage.sync` 读数据 |
+| `Chrome/setItem.js` | 向 `chrome.storage.sync` 写数据 |
+
 ## References
 
 - [DEVLOG.md](./DEVLOG.md) - 开发日志

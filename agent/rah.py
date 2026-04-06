@@ -117,6 +117,7 @@ def get_rah_personalities(pid, platform, pos_records, neg_records, sample_num=1,
         g = nx.Graph()
 
         # save graph
+        os.makedirs("agent/personalities", exist_ok=True)
         nx.write_gml(g, f"agent/personalities/{pid}_{platform}.gml")
     
         with open(f"agent/personalities/{pid}_{platform}.json", "w+") as f:

@@ -14,6 +14,7 @@ from .prompt.alignment import get_simple_personalities_from_browses, get_simple_
 
 from .utils import build_response, feedback_to_response, get_his_message_str,get_browses_wc, get_clicks_wc
 from pypinyin import lazy_pinyin
+from online_TwoStage.unit_controll.dialog import get_guidance_question
 
 
 # 提取标题首字的排序键：中文取拼音首字母，英文取首字母，其他排到最后
@@ -272,8 +273,16 @@ def get_sessions(request): #ok
     # 非POST请求返回失败响应
     return build_response(FAILURE, {"sessions": []})
 
+def get_rules(request):
+    # 获取用户当前所有规则，以后端 DB 为准
+    pid = request.GET.get('pid', '')
+    platform_idx = int(request.GET.get('platform', 0))
+    platform = PLATFORM_CHOICES[platform_idx][0]
+    rules = Rule.objects.filter(pid=pid, platform=platform)
+    rules_list = [{'iid': r.iid, 'rule': r.rule, 'isactive': r.isactive, 'platform': platform_idx} for r in rules]
+    return build_response(SUCCESS, {'rules': rules_list})
+
 def save_rules(request): #ok
-    # 新增、修改、删除规则
     if request.method == "POST":
         data = json.loads(request.body)
         isbot = data['isbot']
@@ -636,6 +645,101 @@ def record_user(request): #ok
 
 
 # 后面是用一个定时任务计算每个人的personalities
+
+
+def guided_chat_start(request):
+    """需求引导对话第一步：根据偏好摘要生成引导问题
+    Args:
+        request: GET 请求，参数为 pid, platform (数字索引)
+    Returns:
+        {guidance_question: str, has_preference: bool}
+    """
+    pid = request.GET.get('pid', '')
+    platform_idx = int(request.GET.get('platform', 0))
+    platform = PLATFORM_CHOICES[platform_idx][0]
+
+    # 读取用户偏好摘要
+    preference_summary = ""
+    personality = Personalities.objects.filter(pid=pid, platform=platform).first()
+    if personality and personality.personality:
+        preference_summary = personality.personality
+
+    guidance_question = get_guidance_question(preference_summary)
+    logger.info("[GuidedChat] start: pid=%s, platform=%s, has_preference=%s", pid, platform, bool(preference_summary))
+    return build_response(SUCCESS, {
+        "guidance_question": guidance_question,
+        "has_preference": bool(preference_summary),
+    })
+
+
+def guided_chat_summarize(request):
+    """需求引导对话第二步：将引导问答传给 fuzzy 生成规则建议
+    Args:
+        request: POST，body 含 pid, platform, guidance_question, user_response
+    Returns:
+        {actions: list} 格式与 /chatbot 一致，供前端弹窗确认
+    """
+    data = json.loads(request.body)
+    pid = data['pid']
+    platform_idx = data['platform']
+    platform = PLATFORM_CHOICES[platform_idx][0]
+    guidance_question = data['guidance_question']
+    user_response = data['user_response']
+
+    # 创建 Session 并保存引导轮对话消息
+    session = Session(pid=pid, task=0, platform=platform, summary="guided chat")
+    session.save()
+    Message(session=session, content=guidance_question, sender='bot').save()
+    Message(session=session, content=user_response, sender='user').save()
+
+    # 构造单轮对话历史字符串
+    chat_history = f"客服:{guidance_question}\n用户:{user_response}"
+
+    # 获取当前规则列表（同 dialogue 流程）
+    platform_id = PLATFORMS.index(platform)
+    rules = Rule.objects.filter(pid=pid, platform=platform)
+    active_rule = rules.filter(isactive=True)
+    rules_json = json.loads(serializers.serialize('json', active_rule))
+    next_iid = max((r.iid for r in rules), default=-1) + 1
+
+    # 调用 fuzzy 生成规则操作建议
+    response, actions = get_fuzzy(chat_history=chat_history, rules=rules_json, platform=platform_id, pid=pid, max_iid=next_iid)
+
+    if not actions:
+        # 用户未表达偏好需求，直接用 get_fuzzy 返回的普通回复（已含规则上下文）
+        logger.info("[GuidedChat] summarize: 无操作，普通回复, pid=%s", pid)
+        return build_response(SUCCESS, {"actions": [], "sid": session.id, "content": response})
+
+    # 创建 GenContentlog 日志记录（is_ac=False，等待用户确认）
+    for action in actions:
+        if action['type'] == 1:
+            gen = GenContentlog.objects.create(
+                pid=pid, action_type='add', platform=platform,
+                new_rule=action['profile']['rule'], old_rule='', is_ac=False, change_rule='',
+                from_which_session=session
+            )
+            action['log_id'] = gen.id
+        elif action['type'] == 2:
+            rule_obj = Rule.objects.filter(pid=pid, iid=action['profile']['iid']).first()
+            old_rule = rule_obj.rule if rule_obj else ''
+            gen = GenContentlog.objects.create(
+                pid=pid, action_type='update', platform=platform,
+                new_rule=action['profile']['rule'], old_rule=old_rule, is_ac=False, change_rule='',
+                from_which_session=session
+            )
+            action['log_id'] = gen.id
+        elif action['type'] == 3:
+            rule_obj = Rule.objects.filter(pid=pid, iid=action['profile']['iid']).first()
+            old_rule = rule_obj.rule if rule_obj else ''
+            gen = GenContentlog.objects.create(
+                pid=pid, action_type='delete', platform=platform,
+                new_rule='', old_rule=old_rule, is_ac=False, change_rule='',
+                from_which_session=session
+            )
+            action['log_id'] = gen.id
+
+    logger.info("[GuidedChat] summarize: 生成 %d 个操作, pid=%s, sid=%s", len(actions), pid, session.id)
+    return build_response(SUCCESS, {"actions": actions, "sid": session.id})
 
 # 被 Django 导入时就会执行：初始化 BackgroundScheduler、注册 job 并 scheduler.start()。通常在服务启动/第一次加载 views 时就会触发。
 

@@ -186,11 +186,12 @@ const ChangeProfile = (
     {
         actionData,
         setAction,
-        setActionMessage, 
+        setActionMessage,
         sid,
         platform,
         setEnabled,
         setLoading,
+        onRulesChange,
     }
 ) => {
     const [nowData, setNowData] = useState([]);
@@ -361,7 +362,7 @@ const ChangeProfile = (
             const res_data = data['data']
             const newMessage = {sender: "bot", message: res_data['content'], avatar: botAvatar};
             setActionMessage(chatHistory => [...chatHistory, newMessage]);
-
+            if (onRulesChange) onRulesChange();
         })
         setAction([]);
         console.log("save end");
