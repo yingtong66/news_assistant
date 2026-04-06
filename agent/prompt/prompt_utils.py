@@ -44,16 +44,19 @@ def get_bailian_response(msg, model=MODEL):
     return response['output']['text']
 
 
-REPONSE = """你的目标是探索用户在社交媒体中的个性化需求, 也就是他们更不愿意看到什么内容, 请根据上下文给出恰当的回复. 请记住, 你的回复应该尽可能简短, 通过询问用户更多信息来鼓励user表达需求.
+REPONSE = """你是一个个性化推荐助手, 帮助用户管理内容过滤和推荐规则。用户可以设置"我不想看xx"(过滤规则)和"我想看xx"(偏好规则)。
+
+请根据上下文给出恰当的回复:
+- 如果用户询问当前规则, 请将规则列表清晰格式化展示给用户
+- 如果用户在闲聊或询问功能, 简要回答并引导用户表达偏好需求
+- 回复应简短友好
 
 **聊天上下文**:
 {messages}
 客服："""
 def get_common_response(messages):
-    print("******check common response prompt********")
-    print(REPONSE.format(messages=messages))
     response = get_bailian_response([{"role": "user", "content":REPONSE.format(messages=messages)}])
-    print(response)
+    logger.info("[CommonResponse] %s", response[:150])
     return response
 
 def get_clean_items(items):

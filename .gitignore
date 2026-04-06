@@ -1,4 +1,4 @@
-agent/prompt/api.json
+# agent/prompt/api.json
 *.pyc
 *.sqlite3
 .idea
@@ -8,6 +8,6 @@ agent/personalities/*.gml
 */__pycache__/*
 *.log
 logs/*
-.venv/*
-.claude/*
+.venv
+.claude
 .output

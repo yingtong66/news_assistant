@@ -186,10 +186,12 @@ const ChangeProfile = (
     {
         actionData,
         setAction,
-        setActionMessage, 
+        setActionMessage,
         sid,
+        platform,
         setEnabled,
         setLoading,
+        onRulesChange,
     }
 ) => {
     const [nowData, setNowData] = useState([]);
@@ -290,7 +292,7 @@ const ChangeProfile = (
             headers: {
                 'Content-Type': 'application/json', 
             },
-            body: JSON.stringify({pid: userPid, sid:sid, platform:0, ac_actions:[], wa_actions:actionData}),
+            body: JSON.stringify({pid: userPid, sid:sid, platform:platform, ac_actions:[], wa_actions:actionData}),
         }).then(res => res.json())
         .then(data => {
             const res_data = data['data']
@@ -352,7 +354,7 @@ const ChangeProfile = (
             headers: {
                 'Content-Type': 'application/json', 
             },
-            body: JSON.stringify({pid: userPid, sid:sid, platform:0, ac_actions:ac_actions, wa_actions:wa_actions}),
+            body: JSON.stringify({pid: userPid, sid:sid, platform:platform, ac_actions:ac_actions, wa_actions:wa_actions}),
         }).then(res => res.json())
         .then(data => {
             setEnabled(true);
@@ -360,7 +362,7 @@ const ChangeProfile = (
             const res_data = data['data']
             const newMessage = {sender: "bot", message: res_data['content'], avatar: botAvatar};
             setActionMessage(chatHistory => [...chatHistory, newMessage]);
-
+            if (onRulesChange) onRulesChange();
         })
         setAction([]);
         console.log("save end");

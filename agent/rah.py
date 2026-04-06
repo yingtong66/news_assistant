@@ -15,7 +15,7 @@ from .utils import get_edit_distance
 logger = logging.getLogger("myapp")
 from  retry import retry
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'PersonaBuddy.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'news_assistant.settings')
 django.setup()
 from .models import PersonalitiesClick
 
@@ -117,12 +117,21 @@ def get_rah_personalities(pid, platform, pos_records, neg_records, sample_num=1,
         g = nx.Graph()
 
         # save graph
+        os.makedirs("agent/personalities", exist_ok=True)
         nx.write_gml(g, f"agent/personalities/{pid}_{platform}.gml")
     
         with open(f"agent/personalities/{pid}_{platform}.json", "w+") as f:
             json.dump(nodes, f, ensure_ascii=False)
     
-    personalities_graph = nx.read_gml(f"agent/personalities/{pid}_{platform}.gml")
+    try:
+        personalities_graph = nx.read_gml(f"agent/personalities/{pid}_{platform}.gml")
+        # GML 加载后节点 id 为字符串，统一转为整数避免与新增整数节点混用
+        personalities_graph = nx.relabel_nodes(personalities_graph, {n: int(n) for n in personalities_graph.nodes() if isinstance(n, str) and n.isdigit()})
+    except Exception as e:
+        import logging
+        logging.getLogger("myapp").warning("[RAH] 读取 gml 失败，重置图文件: %s", e)
+        os.remove(f"agent/personalities/{pid}_{platform}.gml")
+        return ""
     with open(f"agent/personalities/{pid}_{platform}.json", "r") as f:
         nodes = json.load(f)
 
@@ -156,7 +165,7 @@ def get_rah_personalities(pid, platform, pos_records, neg_records, sample_num=1,
 if __name__=="__main__":
     import django
     from .utils import get_edit_distance
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'PersonaBuddy.settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'news_assistant.settings')
     django.setup()
 
     clicks = ['当今科研圈，social不行是不是科研生涯也就到头了？', '电影《抓娃娃》表达了一个什么主题？']

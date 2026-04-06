@@ -1,9 +1,195 @@
 # DEVLOG
 
+## 2026-04-06 历史偏好模块：unit_interpret 接入引导流程
 
-1. 偏好总结函数，调数据库
+### 新增 online_TwoStage/unit_interpret/ 模块
+
+参考 `offline_TwoStage/src/unit_interpret.py`，在 online 侧实现用户历史画像解释模块。
+
+**数据来源（与 offline 的差异）：**
+- 正样本：`Record.objects.filter(click=True)` — 点击过的记录（时间正序）
+- 负样本：`Record.objects.filter(click=False)` 最近 `max_neg=20` 条（曝光未点击）
+
+**三步流程（与 offline 一致）：**
+1. 全量正样本 → `LONG_TERM_PARSER_PROMPT` → 长期偏好
+2. 最近 5 条正样本 → `SHORT_TERM_PARSER_PROMPT` → 短期偏好
+3. 长期 + 短期 + 负样本 → `HISTORY_SUMMARY_PROMPT` → JSON `{positive_group, negative_group}`
+
+**LLM 调用**：复用 `agent/prompt/prompt_utils.get_bailian_response()`（dashscope/qwen），Prompt 使用纯字符串 `.format()` 风格（与 online 现有风格一致）。
+
+**新增文件：**
+- `online_TwoStage/unit_interpret/__init__.py`
+- `online_TwoStage/unit_interpret/prompts.py`：三条 prompt 常量
+- `online_TwoStage/unit_interpret/interpret.py`：`run_unit_interpret(pid, platform, max_neg=20)`
+
+### 接入 guided_chat_start（agent/views.py）
+
+**修改 `guided_chat_start()`**：
+
+旧逻辑：直接读 `Personalities.personality` 字段传给引导语生成函数。
+
+新逻辑：
+1. 查 `Personalities.update_time` 与最新 `Record.browse_time` 对比
+2. 有新数据 → 调 `run_unit_interpret()` → 格式化正/负偏好写回 `Personalities.personality`
+3. 无新数据 → 直接用缓存，避免重复调 3 次 LLM
+4. 传给 `get_guidance_question()` 生成个性化引导语
+
+**新增接口 `GET /guided_chat/refresh`**：强制清除 `Personalities` 缓存，重新运行三步 LLM，返回新引导语。注册路由 `guided_chat/refresh`。
+
+### 前端：Dashboard 历史偏好区刷新按钮
+
+**Dashboard.jsx 改动：**
+- `HistoryPreference` 组件新增 `onRefresh` prop，标题行右侧加 `ReloadOutlined` 图标按钮（hover tooltip：重新分析历史偏好）
+- 新增 `refreshPreference()` 函数：调 `/guided_chat/refresh` → 更新偏好标签 + 重置聊天引导语
+- 偏好标签解析改为只取 `- ` 开头的行，避免标题行变成 tag
+
+### 前端：历史偏好区 UI 重新设计
+
+**HistoryPreference 组件重构：**
+- 正向/负向偏好分区上下展示（`flex-direction: column`）
+- 正向偏好：蓝色小标题 + 蓝色 Tag
+- 负向偏好：红色小标题 + 红色 Tag
+- 无内容时各区显示"暂无"；完全无数据时显示默认提示文案
+
+
+
+### 修复5：对话显示规则与已有规则不一致
+- 问题：`guided_chat_summarize` 的无 actions 分支重新调 `get_common_response(chat_history)`，未传规则上下文，LLM 回复"过滤规则：暂无"，与实际规则不符
+- 修复：直接使用 `get_fuzzy` 返回的 `response`（其 else 分支内部已将规则拼入上下文再调 LLM），去掉多余的 `get_common_response` import
+
+
+### 修复1：guided_chat_summarize 缺少 Session，make_new_message 报错
+- 问题：`/guided_chat/summarize` 没有创建 Session，`nowsid` 始终为 `-1`，用户确认规则后 `/make_new_message` 找不到会话报错
+- 修复：`guided_chat_summarize` 创建 Session 并保存引导轮两条消息（bot 问 + 用户回），返回 `sid`；`GenContentlog` 关联 `from_which_session`；前端收到 `sid` 后更新 `nowsid`（Dashboard + Chatbot 均修改）
+
+### 修复2：规则栏与对话显示的规则不一致
+- 问题：右侧规则栏从 `chrome.storage` 读，对话从后端 DB 读，两处数据源不同步导致显示不一致
+- 修复：新增后端接口 `GET /get_rules?pid=&platform=`，返回后端 DB 中该用户的所有规则；Dashboard `loadRules` 改为从后端读，读完后同步写回 `chrome.storage`；注册路由 `get_rules`
+
+### 修复3：规则确认后右侧规则栏不刷新
+- 问题：`ChangeProfile` 确认规则后更新了 `chrome.storage`，但 Dashboard 的规则状态只在挂载时读一次，不会自动刷新
+- 修复：`ChangeProfile` 新增可选 `onRulesChange` 回调，`saveFunc` 完成后触发；Dashboard 传入 `onRulesChange={loadRules}`
+
+### 修复4：第一次问"有哪些规则"报错，第二次才正常
+- 问题：引导模式下首条消息都走 `/guided_chat/summarize`，"我现在有哪些规则"不含偏好表达，`get_fuzzy` 返回空 actions，前端直接显示"未检测到明确偏好需求"
+- 修复：后端 actions 为空时调 `get_common_response` 正常回复，返回 `content` 字段；前端收到无 actions 的回复时正常展示内容，**不清空 `guidanceQuestion`**（保持引导状态），只有确认有 actions 时才清空引导状态；`views.py` 新增 `get_common_response` import
+
+### 引导语优化
+- 修改 `GUIDANCE_WARM_PROMPT`：原来只生成引导问句，改为先说明"根据您的历史浏览，发现您对xxx感兴趣"，再提引导问题，两部分合一，总长度不超过80字
+
+## 2026-04-06 前端废弃文件清理
+
+- 删除 `pages/Home.jsx`（旧菜单导航，已被 Dashboard 替代）
+- 删除 `pages/FuzzyRequest.jsx`（title=0 聊天入口，功能已迁入 Dashboard）
+- 删除 `components/ChromeHeader.jsx`（无任何页面引用）
+- `App.js` 移除对应 import 和 `/fuzzy` 路由，注释同步更新
+- `Profile.jsx` 移除 `ChromeHeader` import，改用 `Typography.Title`
+
+## 2026-04-06 Dashboard 对话逻辑改造
+
+- 每次打开 Dashboard 不再加载历史 session，直接清空聊天区调 `/guided_chat/start` 输出引导问句
+- 新增 `guidanceQuestion` 状态：非空时用户回复走 `/guided_chat/summarize`，有 actions 时才清空，后续恢复普通 `/chatbot`
+- 同步修改 `Chatbot.jsx`（`title=0` 逻辑保持一致）
+
+
+
+### 新增 guided dialog 模块
+
+参考 offline_TwoStage 的用户需求可控性模块，在 `online_TwoStage/unit_controll/` 下实现需求引导对话，复用 `agent/prompt/fuzzy.py` 的规则生成逻辑。
+
+**新增文件：**
+- `online_TwoStage/unit_controll/__init__.py`
+- `online_TwoStage/unit_controll/prompts.py`：冷启动模板句 `GUIDANCE_COLD_TEMPLATE` + 个性化引导 `GUIDANCE_WARM_PROMPT`
+- `online_TwoStage/unit_controll/dialog.py`：`get_guidance_question(preference_summary)` — 有偏好时 LLM 生成引导问句，无偏好时返回固定模板句
+
+**新增后端接口（`agent/views.py` + `agent/urls.py`）：**
+- `GET /guided_chat/start?pid=&platform=`：读取 `Personalities.personality` 作为偏好摘要，返回 `{guidance_question, has_preference}`
+- `POST /guided_chat/summarize`：接收 `{pid, platform, guidance_question, user_response}`，构造单轮对话历史，直接调 `get_fuzzy()` 生成规则建议，创建 `GenContentlog`（`is_ac=False`），返回 `{actions}`，格式与 `/chatbot` 完全一致
+
+**流程：**
+1. 进入 `/fuzzy` 页面 → 调 `/guided_chat/start` 展示引导问句
+2. 用户输入澄清需求 → 调 `/guided_chat/summarize` → 返回 actions
+3. 弹出已有确认弹窗 → 用户确认 → 走现有 `save_rules` / `make_new_message` 流程
+
+### 前端对接 (Chatbot.jsx)
+
+- 新增 `guidanceQuestion` 状态，非空时标志处于引导模式
+- 初始化和 `addSession`（`title=0`）：把 `/get_alignment` 替换为 `/guided_chat/start`
+- `sendMessage` 新增引导模式分支：`guidanceQuestion` 非空时走 `/guided_chat/summarize`，成功后清空引导状态；若 actions 为空则提示用户重新描述；之后恢复普通 `/chatbot` 模式
+
+### 删除多余文档
+
+删除根目录下由历史 Claude 会话生成的 4 个冗余 txt 文档：`API_SUMMARY.txt`、`API_VISUAL_OVERVIEW.txt`、`QUICK_REFERENCE.txt`、`API_CHEATSHEET.txt`，符合"每个项目只保留 README.md 和 DEVLOG.md"原则。
+
+## 2026-04-06 前端全面重构：三栏 Dashboard 布局
+
+### 新增 Dashboard.jsx
+- 新建 `my-profile-buddy-frontend/src/pages/Dashboard.jsx`，替代原 Home.jsx 的菜单导航。
+- 布局：顶部标题栏 + 左列（历史偏好+聊天框）+ 右列（规则列表），宽 750px，高 600px，`overflow:hidden`。
+- 历史偏好区：挂载时调 `/get_alignment`，有数据展示蓝色 Tag 标签，无数据显示默认提示"暂时还没有足够的浏览记录，继续使用后我会逐渐了解你的偏好～"。
+- 聊天区：复用原 Chatbot.jsx 核心逻辑，去掉 SessionList（单 session），保留 ChangeProfile 弹窗。
+- 规则列表：复用 ProfileCard 增删改逻辑，右列独立滚动。
+
+### 修改 App.js
+- `/home` 路由从 `Home` 改为 `Dashboard`。
+- 容器宽度从 400px 扩大到 750px。
+
+### 修复 chrome.storage 非插件环境报错
+- `getItem.js` / `setItem.js` 加 fallback：非插件环境降级到 `localStorage`，解决 `localhost:3000` 调试时 `chrome.storage` 不存在的报错。
+- `App.js` 的 `chrome.storage.sync.set` 加 `chrome.storage &&` 保护。
+
+### 布局滚动条修复
+- 外层容器加 `overflow:hidden`，高度从 `100vh` 改为写死 `600px`（Chrome popup 上限），消除最外层多余滚动条。
+- `index.css` 的 body 加 `overflow:hidden`，禁止页面级滚动。
+- 聊天消息区和规则列表区各自内部独立滚动。
+
+### 清理多余文档
+- 删除 Explore agent 自动生成的 20 个多余 md 文件（违反全局规则：每个项目只能有 README.md 和 DEVLOG.md）。
+
+
+
 2. 对话函数，根据对话历史生成下一条
 3. 重排序和过滤函数，api根据对话
+
+## 2026-04-05 项目重命名 + prompt 修正 + make_new_message 调试
+
+### 项目重命名: PersonaBuddy -> news_assistant
+- 目录 `PersonaBuddy/` 重命名为 `news_assistant/`。
+- 所有文件中的 `PersonaBuddy` 引用替换为 `news_assistant`（manage.py, settings.py, wsgi.py, asgi.py, urls.py, rah.py, check_filter_item.py, eval_new.py, manifest.json, CLAUDE.md, README.md, 0_Explain_ALL.md, DEVLOG.md）。
+
+### 过滤/重排 prompt 修正 (`online_TwoStage/prompts.py`)
+- 过滤 prompt: "只要沾边就移除，宁可多过滤" 改为 "主题必须直接属于规则类别才移除，不确定时保留"。增加示例说明（如"体育规则不该移除碰巧提到运动员的政治新闻"）。修复军事新闻被"不想看体育"误杀的问题。
+- 重排 prompt: "按相关性排序，不相关排末尾" 改为 "只有明确匹配偏好的才提前，其余保持原序；无匹配时完全保持原序"。修复候选中无科技新闻时 LLM 把军事/政治排前面的问题。
+
+### pipeline.py 日志增强
+- rerank_list 前输出正向规则，removed_list 前输出负向规则，方便对照验证。
+
+### HAS_ACTION_PROMPT 修复 (`agent/prompt/fuzzy.py`)
+- 从"根据对话内容"改为"请你仅根据用户最后一条消息来判断"。修复 LLM 重复分析历史轮次已处理的偏好（如之前加过的"我想看科技新闻"）。
+
+### REPONSE prompt 重写 (`agent/prompt/prompt_utils.py`)
+- 从窄定位"探索用户不愿意看什么内容"改为通用助手角色：处理规则查询、闲聊、功能引导。修复用户问"我现在有哪些规则"时仍回复"您还希望过滤哪些类型的内容呢？"的问题。
+
+### make_new_message 调试
+- 点击弹窗确认后消息不显示。排查发现 `/make_new_message` 返回 FAILURE（26字节），session 查询失败。添加 `[make_new_message]` 错误日志输出 sid/pid/platform，待进一步确认原因。
+
+## 2026-04-05 对话函数支持正向规则生成 + 日志简化 + 规则查询
+
+### 正向规则生成 (`agent/prompt/fuzzy.py`)
+- 新增 `CHANGE_POSITIVE_RULES_PROMPT` + `get_change_positive_rules()`: 与负向规则的 `CHANGE_RULES_PROMPT` 对称，生成"我想看xx"格式的正向规则。
+- 重写 `has_likes` 分支为两步:
+  - Step A (矛盾处理): 只传 negative 子集给 `get_contradiction_rules`，独立 histories_neg。
+  - Step B (正向规则): 有已有正向规则时走 `get_change_positive_rules`；没有时直接从 needs 转换新增。
+  - 合并两步 actions 返回。
+- `has_dislikes` 分支不变。
+
+### 规则查询支持
+- `get_fuzzy` 的 `else` 分支(无明确偏好意图)：将 `rules_str` 拼入 `get_common_response` 的上下文，LLM 能看到用户当前规则并格式化回复。用户问"我现在有哪些规则"可正确回答。
+
+### 日志简化
+- `fuzzy.py`: 去掉所有 `"******check xxx prompt********"` 和完整 histories dump，改为 `[Fuzzy]` 前缀的简洁 logger.info。
+- `prompt_utils.py`: `get_common_response` 去掉 print，改为 `[CommonResponse]` 前缀日志。
+- `views.py`: `dialogue` 函数在 `get_fuzzy` 返回后加 `[Dialogue]` 结果摘要日志(操作类型+内容)。
 
 ## 2026-04-05 重写过滤/重排 prompt + 平台编号调整 + 日志精简
 
@@ -113,7 +299,7 @@ d
 
 ### 环境准备
 
-从 `PersonaBuddy-master/.venv` 复用 Python 3.11.15 创建了本项目的 `.venv/`。
+从 `news_assistant-master/.venv` 复用 Python 3.11.15 创建了本项目的 `.venv/`。
 requirements.txt 不完整，实际还需额外安装 colorlog、django-extensions、networkx、numpy。
 
 当前 .venv 已安装的关键包：

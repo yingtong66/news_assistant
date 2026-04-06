@@ -67,7 +67,7 @@ const Chatbot = (
     const [showSession, setShowSession] = useState(false);
     const [allSessions, setAllSessions] = useState([]);
     const location = useLocation();
-    const [nowsid, setNowSid] = useState(0); 
+    const [nowsid, setNowSid] = useState(0);
     const [chatHistory, setChatHistory] = useState([]);
 
     //处理更改画像的问题
@@ -76,26 +76,33 @@ const Chatbot = (
     //处理加载过慢问题
     const [loading, setLoading] = useState(false);
 
+    // 需求引导模式：存储引导问题，非空时首条用户消息走 /guided_chat/summarize
+    const [guidanceQuestion, setGuidanceQuestion] = useState("");
+
+    // Helper function to get current session's platform
+    const getCurrentSessionPlatform = () => {
+        if (nowsid === -1) return 0; // Default to Toutiao for new sessions
+        const currentSession = allSessions.find(s => s.sid === nowsid);
+        return currentSession ? currentSession.platform : 0;
+    };
+
     const addSession = () => {
         console.log("add session");
         setShowSession(false);
         setEnabled(false);
         setLoading(true);
         setNowSid(-1);
+        setGuidanceQuestion("");
         setAllSessions(allsessions=>[...allsessions, {sid:-1, task:title, platform:0, summary:"NEW ONE"}]);
         //这里需要从服务端获取一条默认的系统消息
         if (title === 0){
-            fetch(`${backendUrl}/get_alignment`,{
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json', 
-                },
-                body: JSON.stringify({pid:userPid,  platform:0}),
-            }).then(response => response.json())
+            fetch(`${backendUrl}/guided_chat/start?pid=${userPid}&platform=0`)
+            .then(response => response.json())
             .then(data=>{
-                console.log(data['code']);
-                const res_data = data['data']
-                const newMessage = {sender: "bot", message: res_data['response'], avatar: botAvatar};
+                const res_data = data['data'];
+                const q = res_data['guidance_question'];
+                setGuidanceQuestion(q);
+                const newMessage = {sender: "bot", message: q, avatar: botAvatar};
                 setChatHistory([newMessage]);
                 setEnabled(true);
                 setLoading(false);
@@ -104,7 +111,7 @@ const Chatbot = (
             fetch(`${backendUrl}/get_feedback`,{
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json', 
+                    'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({pid:userPid,  platform:0}),
             }).then(response => response.json())
@@ -118,10 +125,50 @@ const Chatbot = (
             });
         }
     }
+
+    // 强制刷新历史偏好：清除缓存，重新运行三步LLM，并重置当前对话
+    const refreshPreference = () => {
+        setEnabled(false);
+        setLoading(true);
+        setNowSid(-1);
+        setGuidanceQuestion("");
+        setChatHistory([]);
+        fetch(`${backendUrl}/guided_chat/refresh?pid=${userPid}&platform=0`)
+        .then(response => response.json())
+        .then(data => {
+            const res_data = data['data'];
+            const q = res_data['guidance_question'];
+            setGuidanceQuestion(q);
+            setChatHistory([{sender: "bot", message: q, avatar: botAvatar}]);
+            setEnabled(true);
+            setLoading(false);
+        })
+        .catch((error) => { console.error('刷新偏好失败:', error); setEnabled(true); setLoading(false); });
+    }
     //打开对话的显示
     useEffect(() => {
         setEnabled(false);
         setLoading(true);
+        setGuidanceQuestion("");
+
+        if (title === 0) {
+            // 需求引导模式：每次打开直接清空，输出引导语，不加载历史
+            setNowSid(-1);
+            setChatHistory([]);
+            fetch(`${backendUrl}/guided_chat/start?pid=${userPid}&platform=0`)
+            .then(response => response.json())
+            .then(data => {
+                const res_data = data['data'];
+                const q = res_data['guidance_question'];
+                setGuidanceQuestion(q);
+                setChatHistory([{sender: "bot", message: q, avatar: botAvatar}]);
+                setEnabled(true);
+                setLoading(false);
+            })
+            .catch((error) => { console.error('Error:', error); });
+            return;
+        }
+
         fetch(`${backendUrl}/chatbot/get_sessions`,{
             method: 'POST', 
             headers: {
@@ -158,23 +205,7 @@ const Chatbot = (
                 });
             }
             else{
-                if (title === 0){
-                    fetch(`${backendUrl}/get_alignment`,{
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json', 
-                        },
-                        body: JSON.stringify({pid:userPid,  platform:0}),
-                    }).then(response => response.json())
-                    .then(data=>{
-                        console.log(data['code']);
-                        const res_data = data['data']
-                        const newMessage = {sender: "bot", message: res_data['response'], avatar: botAvatar};
-                        setChatHistory([newMessage]);
-                        setEnabled(true);
-                        setLoading(false);
-                    })
-                } else if(title === 2){
+                if (title === 2){
                     fetch(`${backendUrl}/get_feedback`,{
                         method: 'POST',
                         headers: {
@@ -245,7 +276,42 @@ const Chatbot = (
         const userMessage = {sender: "user", message: message, avatar: userAvatar};
         setChatHistory(chatHistory => [...chatHistory, userMessage]);
         setEnabled(false);
-        
+        setMessage("");
+
+        // 引导模式：首条回复走 /guided_chat/summarize
+        if (guidanceQuestion) {
+            fetch(`${backendUrl}/guided_chat/summarize`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pid: userPid,
+                    platform: 0,
+                    guidance_question: guidanceQuestion,
+                    user_response: userMessage.message,
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                const res_data = data['data'];
+                if (res_data.sid) setNowSid(res_data.sid);
+                if (res_data.actions && res_data.actions.length !== 0) {
+                    setGuidanceQuestion(""); // 有操作才清空引导状态
+                    setAction(res_data.actions);
+                } else {
+                    // 普通回复：展示内容，保持引导状态继续等待偏好表达
+                    const reply = res_data.content || res_data.message || "未检测到明确需求，请重新描述您想看或不想看的内容。";
+                    const newMessage = {sender: "bot", message: reply, avatar: botAvatar};
+                    setChatHistory(chatHistory => [...chatHistory, newMessage]);
+                }
+                setEnabled(true);
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                setEnabled(true);
+            });
+            return;
+        }
+
         fetch(`${backendUrl}/chatbot`,{
             method: 'POST', 
             headers: {
@@ -278,10 +344,8 @@ const Chatbot = (
             setEnabled(true); //输入框可以继续输入
         })
         .catch((error)=>{
-            console.error('Error:',error);   
+            console.error('Error:',error);
         });
-   
-        setMessage("");
     }
 
     return (
@@ -291,7 +355,7 @@ const Chatbot = (
                 width:"100%",
             }}
             >
-                <ChatHeader title={taskOptions[title]} clickMore={()=>{setShowSession(true)}}/>
+                <ChatHeader title={taskOptions[title]} clickMore={()=>{setShowSession(true)}} onRefresh={refreshPreference} showRefresh={title === 0}/>
                 <Spin spinning={loading}>
                 <Content class="chat-container">
                     <div class="chat-body" id="chat-body" ref={chatEndRef}>
@@ -332,6 +396,7 @@ const Chatbot = (
                 setAction={setAction}
                 setActionMessage={setChatHistory}
                 sid={nowsid}
+                platform={getCurrentSessionPlatform()}
                 setEnabled = {setEnabled}
                 setLoading = {setLoading}
             />

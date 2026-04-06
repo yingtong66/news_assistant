@@ -1,6 +1,6 @@
 import React from "react";
 import { Layout, Typography } from 'antd';
-import {LeftCircleOutlined, MoreOutlined} from '@ant-design/icons';
+import {LeftCircleOutlined, MoreOutlined, ReloadOutlined} from '@ant-design/icons';
 
 
 const headerStyle = {
@@ -10,7 +10,7 @@ const headerStyle = {
     lineHeight: '50px',
     display: 'flex',
     paddingInline: 0,
-    padding:0, 
+    padding:0,
     textAlign: "center",
     justifyContent: "space-between",
     alignItems: "center",
@@ -20,15 +20,15 @@ const headerStyle = {
 const { Header } = Layout;
 
 const ChatHeader = (
-    {title, clickMore}
+    {title, clickMore, onRefresh, showRefresh}
 ) => {
-    
+
 
     return(
         <Header style={headerStyle}>
             <LeftCircleOutlined
                 style={{
-                    color: '#fff', 
+                    color: '#fff',
                     fontSize: '30px',
                     marginLeft:20,
                     border: 'none',
@@ -47,12 +47,23 @@ const ChatHeader = (
             >
                 {title}
             </Typography.Title>
-            <MoreOutlined 
+            {showRefresh && (
+                <ReloadOutlined
+                    style={{
+                        color: '#fff',
+                        fontSize: '22px',
+                        marginRight: 10,
+                        flex: 1,
+                    }}
+                    onClick={onRefresh}
+                />
+            )}
+            <MoreOutlined
                 style={{
                     color: '#fff',
                     fontSize: '30px',
                     marginRight: 0,
-                    flex: 1,
+                    flex: showRefresh ? 0 : 1,
                 }}
                 onClick={clickMore}
             />
