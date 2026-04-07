@@ -1,5 +1,80 @@
 # DEVLOG
 
+## 2026-04-08 废弃 RAH 偏好对齐 + reorder 批量写入浏览记录
+
+### 废弃 get_alignment
+- 注释掉 `views.py` 的 `get_alignment` 函数和 `alignment` 模块 import
+- 注释掉 `urls.py` 的 `/get_alignment` 路由
+- 该功能已由 `guided_chat/start` + `unit_interpret` 替代，`alignment.py` 文件保留备参考
+
+### 浏览记录改由 /reorder 批量写入
+- 之前 `/browse` 请求被注释掉后，Record 表不再有浏览记录，导致点击记录也失效
+- 在 `views.py` 的 `reorder` 函数中，重排前批量 `Record.objects.create()` 写入这批卡片的浏览记录
+- 前端 `zhihu.js` 的 `processElement` 不再发送任何后端请求，只负责提取标题
+
+## 2026-04-07 头条页面非图文元素清理
+
+- `zhihu.js` 新增 `cleanToutiaoNonArticles()` 函数，删除头条页面中所有非图文元素：
+  - `.right-container` (右侧栏：热搜榜、安全课堂、热门视频)
+  - `.home-banner-wrapper` (要闻 banner)
+  - `.main-nav-wrapper` (导航栏)
+  - `.feed-five-wrapper` (五条推荐区块)
+  - `.fix-header` (固定顶栏)
+  - `.header-right` / `.search-container` (搜索区域)
+  - `.feed-card-video-wrapper` (小视频卡片)
+  - `.feed-card-wtt-wrapper` (微头条/动态卡片)
+  - `.feed-card-wrapper:not(.feed-card-article-wrapper)` (兜底：所有非图文卡片)
+- 在页面初始加载和每批重排完成后调用
+- MutationObserver 中新增动态拦截：新插入的非图文卡片(`.feed-card-wrapper:not(.feed-card-article-wrapper)`)立即删除，防止动态加载的视频/微头条逃脱清理
+
+## 2026-04-07 前端适配过滤条目移除
+
+- 后端 `pipeline.py` 改为过滤条目不返回后，`order.length < liveNodes.length`，前端 `zhihu.js` 的 `order.length !== liveNodes.length` 严格校验导致重排完全不执行
+- 修复：去掉长度严格相等校验，改为 `order.length === 0` 时才放弃
+- order 中没出现的 id 对应的卡片 `display:none` 隐藏，不再展示在页面上
+- 保留的卡片按 order 顺序重新插入
+
+## 2026-04-07 去掉规则卡片的平台选择下拉框
+
+- 当前只需要头条平台，移除规则卡片上的平台 Select 下拉框
+- `Dashboard.jsx`: 删除平台 Select、移除 `platformOptions` import 和 `handlePlatformChange`
+- `Profile.jsx`: 同上
+- 新建规则 platform 默认为 0（头条），不受影响
+
+## 2026-04-07 历史偏好区增加折叠/展开功能
+
+- `Dashboard.jsx` 的 `HistoryPreference` 组件新增 `collapsed` state，点击标题可折叠/展开
+- 折叠时隐藏偏好标签和刷新按钮，只保留标题行，节省纵向空间
+- 标题右侧显示 `DownOutlined`/`UpOutlined` 箭头图标指示当前状态
+- 新增 import `DownOutlined, UpOutlined` from `@ant-design/icons`
+
+## 2026-04-07 过滤条目不再展示
+
+- `online_TwoStage/pipeline.py`: 被 removed_list 过滤掉的条目不再追加到 final_order 末尾，直接从返回结果中移除
+- 之前: `final_order = rerank_order + removed_order`，过滤的排到组内最后
+- 现在: `final_order = rerank_order`，过滤的彻底不展示
+- 日志仍记录被过滤条目，方便排查
+
+## 2026-04-07 UI 调整：去掉顶部黑色标题 + 开关按钮迁移 + 头条非图文元素清理
+
+### manifest.json 清理
+- 删除 `_comments` 字段，消除 Chrome "Unrecognized manifest key '_comments'" 警告
+
+### 去掉顶部黑色 "Hi, xxx! Let's Go~" 模块
+- `StartButtion.jsx`：开启状态下返回 null，不再渲染黑色标题栏；关闭状态下只显示"点击开启推荐助手"文字 + Off 开关按钮
+- `Dashboard.jsx`：蓝色标题行改为 flex 布局，右侧放置 On/Off 开关按钮（从 StartButton 迁入）
+- `App.js`：把 `isOpen` 和 `openBuddy` 作为 props 传给 Dashboard
+
+### 头条页面非图文元素自动清理
+- `zhihu.js` 新增 `cleanToutiaoNonArticles()` 函数，重排后自动删除：
+  - `.ttp-feed-module` 容器内非 `feed-card-article-wrapper` 的子元素
+  - 顶部要闻 banner (`.home-banner-wrapper`)
+  - 安全课堂 (`.security-course-wrapper`)
+  - 右侧热搜榜 (`.home-hotboard`)
+  - 顶部导航栏 (`.main-nav-wrapper`)
+  - 五条推荐区块 (`.feed-five-wrapper`)
+- 在两个时机调用：页面初始加载时、每批重排完成后
+
 ## 2026-04-07 用户 UID 注册/登录功能
 
 ### 背景

@@ -1,12 +1,14 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Button, Flex, Input, List, Modal, Select, Spin, Tag, Tooltip, Typography } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { ReloadOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
 import TextArea from 'antd/es/input/TextArea';
 import { Form } from 'antd';
 import Markdown from 'react-markdown';
-import { backendUrl, platformOptions } from '../utils/Const';
+import { backendUrl } from '../utils/Const';
 import { getItem } from '../utils/Chrome/getItem';
 import { setItem } from '../utils/Chrome/setItem';
+import { Switch } from 'antd';
+import { Link } from 'react-router-dom';
 import UserContext from '../contexts/UserContext';
 import ChangeProfile from '../components/ChangeProfile';
 import userAvatar from '../images/user-avatar.png';
@@ -16,8 +18,9 @@ import '../pages/Profile/Profile.css';
 
 const { Search } = Input;
 
-// 历史偏好展示区
+// 历史偏好展示区（可折叠）
 const HistoryPreference = ({ personalities, loading, onRefresh }) => {
+    const [collapsed, setCollapsed] = useState(false);
     // 解析多行格式：只取 "- " 开头的行，区分正向/负向区块
     const posTags = [];
     const negTags = [];
@@ -40,55 +43,64 @@ const HistoryPreference = ({ personalities, loading, onRefresh }) => {
             padding: '10px 12px',
             background: '#fafafa',
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontWeight: 'bold', fontSize: 13, color: '#555', flex: 1 }}>历史偏好</span>
-                <Tooltip title="重新分析历史偏好">
-                    <Button
-                        type="text"
-                        size="small"
-                        icon={<ReloadOutlined />}
-                        loading={loading}
-                        onClick={onRefresh}
-                        style={{ color: '#1677ff' }}
-                    />
-                </Tooltip>
-            </div>
-            <Spin spinning={loading} size="small">
-                {hasAny ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {/* 正向偏好 */}
-                        <div>
-                            <div style={{ fontSize: 11, color: '#1677ff', fontWeight: 'bold', marginBottom: 4 }}>正向偏好</div>
-                            {posTags.length > 0 ? (
-                                <Flex wrap="wrap" gap={4}>
-                                    {posTags.map((tag, i) => (
-                                        <Tag key={i} color="blue" style={{ fontSize: 12 }}>{tag}</Tag>
-                                    ))}
-                                </Flex>
-                            ) : (
-                                <Typography.Text type="secondary" style={{ fontSize: 11 }}>暂无</Typography.Text>
-                            )}
-                        </div>
-                        {/* 负向偏好 */}
-                        <div>
-                            <div style={{ fontSize: 11, color: '#ff4d4f', fontWeight: 'bold', marginBottom: 4 }}>负向偏好</div>
-                            {negTags.length > 0 ? (
-                                <Flex wrap="wrap" gap={4}>
-                                    {negTags.map((tag, i) => (
-                                        <Tag key={i} color="red" style={{ fontSize: 12 }}>{tag}</Tag>
-                                    ))}
-                                </Flex>
-                            ) : (
-                                <Typography.Text type="secondary" style={{ fontSize: 11 }}>暂无</Typography.Text>
-                            )}
-                        </div>
-                    </div>
-                ) : (
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        暂时还没有足够的浏览记录，继续使用后我会逐渐了解你的偏好～
-                    </Typography.Text>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: collapsed ? 0 : 8 }}>
+                <span
+                    style={{ fontWeight: 'bold', fontSize: 13, color: '#555', flex: 1, cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => setCollapsed(c => !c)}
+                >
+                    历史偏好 {collapsed ? <DownOutlined style={{ fontSize: 10 }} /> : <UpOutlined style={{ fontSize: 10 }} />}
+                </span>
+                {!collapsed && (
+                    <Tooltip title="重新分析历史偏好">
+                        <Button
+                            type="text"
+                            size="small"
+                            icon={<ReloadOutlined />}
+                            loading={loading}
+                            onClick={onRefresh}
+                            style={{ color: '#1677ff' }}
+                        />
+                    </Tooltip>
                 )}
-            </Spin>
+            </div>
+            {!collapsed && (
+                <Spin spinning={loading} size="small">
+                    {hasAny ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {/* 正向偏好 */}
+                            <div>
+                                <div style={{ fontSize: 11, color: '#1677ff', fontWeight: 'bold', marginBottom: 4 }}>正向偏好</div>
+                                {posTags.length > 0 ? (
+                                    <Flex wrap="wrap" gap={4}>
+                                        {posTags.map((tag, i) => (
+                                            <Tag key={i} color="blue" style={{ fontSize: 12 }}>{tag}</Tag>
+                                        ))}
+                                    </Flex>
+                                ) : (
+                                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>暂无</Typography.Text>
+                                )}
+                            </div>
+                            {/* 负向偏好 */}
+                            <div>
+                                <div style={{ fontSize: 11, color: '#ff4d4f', fontWeight: 'bold', marginBottom: 4 }}>负向偏好</div>
+                                {negTags.length > 0 ? (
+                                    <Flex wrap="wrap" gap={4}>
+                                        {negTags.map((tag, i) => (
+                                            <Tag key={i} color="red" style={{ fontSize: 12 }}>{tag}</Tag>
+                                        ))}
+                                    </Flex>
+                                ) : (
+                                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>暂无</Typography.Text>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            暂时还没有足够的浏览记录，继续使用后我会逐渐了解你的偏好～
+                        </Typography.Text>
+                    )}
+                </Spin>
+            )}
         </div>
     );
 };
@@ -117,7 +129,6 @@ const ProfileCard = ({ item, delFunc, saveFunc, toggleEdit, edit, isModalOpen, s
         setFormData(prev => ({ ...prev, [name]: value }));
     };
     const handleActiveChange = (val) => setFormData(prev => ({ ...prev, isactive: val }));
-    const handlePlatformChange = (val) => setFormData(prev => ({ ...prev, platform: val }));
 
     return (
         <Form>
@@ -151,14 +162,6 @@ const ProfileCard = ({ item, delFunc, saveFunc, toggleEdit, edit, isModalOpen, s
                         确定删除<Typography.Text keyboard>{formData.rule}</Typography.Text>
                     </Modal>
                     <Select
-                        value={formData.platform}
-                        options={platformOptions}
-                        disabled={!edit}
-                        onChange={handlePlatformChange}
-                        size="small"
-                        style={{ width: 70 }}
-                    />
-                    <Select
                         value={formData.isactive}
                         options={[{ value: true, label: '激活' }, { value: false, label: '停用' }]}
                         disabled={!edit}
@@ -173,7 +176,7 @@ const ProfileCard = ({ item, delFunc, saveFunc, toggleEdit, edit, isModalOpen, s
 };
 
 // 主 Dashboard 页面
-const Dashboard = () => {
+const Dashboard = ({ isOpen, openBuddy }) => {
     const userPid = useContext(UserContext);
     // ---- 历史偏好 ----
     const [personalities, setPersonalities] = useState('');
@@ -370,7 +373,7 @@ const Dashboard = () => {
     const addRule = () => {
         if (editable.some(e => e)) { alert('请先保存当前编辑中的规则'); return; }
         const maxIid = rules.length === 0 ? 0 : rules.reduce((m, r) => r.iid > m ? r.iid : m, 0);
-        setRules(r => [...r, { iid: maxIid + 1, platform: 0, rule: '我不想看……', isactive: true }]);
+        setRules(r => [...r, { iid: maxIid + 1, platform: 0, rule: '我想看……/我不想看……', isactive: true }]);
         setEditable(e => [...e, true]);
         setIsModalOpen(m => [...m, false]);
     };
@@ -394,8 +397,17 @@ const Dashboard = () => {
                 background: '#fff',
                 color: '#1677ff',
                 flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
             }}>
-                Hi, {userPid}! 欢迎使用个性化新闻推荐助手
+                <span>Hi, {userPid}! 欢迎使用个性化新闻推荐助手</span>
+                <Switch
+                    checked={isOpen}
+                    onChange={openBuddy}
+                    checkedChildren={<Link to="/home">On</Link>}
+                    unCheckedChildren={<Link to="/">Off</Link>}
+                />
             </div>
 
             {/* 主体区域 */}

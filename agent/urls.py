@@ -12,7 +12,7 @@ urlpatterns = [
     path("save_rules", save_rules),
     path("get_rules", get_rules),
     path("chatbot/get_history/<int:sid>", get_history),
-    path("get_alignment", get_alignment),
+    # path("get_alignment", get_alignment),  # 已由 guided_chat/start + unit_interpret 替代
     path("get_feedback", get_feedback),
     path("save_search", save_search),
     path("make_new_message", make_new_message),

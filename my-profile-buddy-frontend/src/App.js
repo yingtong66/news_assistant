@@ -68,7 +68,7 @@ function App() {
             <Route path="/alignment" element={<ProfileAlignment></ProfileAlignment>}></Route>
             <Route path="/feedback" element={<Feedback></Feedback>}></Route>
             <Route path="/profile" element={<Profile></Profile>}></Route>
-            <Route path="/home" element={<Dashboard></Dashboard>}></Route>
+            <Route path="/home" element={<Dashboard isOpen={isOpen} openBuddy={openBuddy}></Dashboard>}></Route>
             <Route path="/" element={<EmptyPage></EmptyPage>}></Route>
           </Routes>
       </Content>

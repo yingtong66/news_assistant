@@ -11,7 +11,8 @@ from .models import *
 import random
 from .prompt.filter import filter_item
 from .prompt.fuzzy import get_fuzzy
-from .prompt.alignment import get_simple_personalities_from_browses, get_simple_personalities_from_clicks
+# [已废弃] RAH 偏好对齐，已由 guided_chat/start + unit_interpret 替代
+# from .prompt.alignment import get_simple_personalities_from_browses, get_simple_personalities_from_clicks
 
 from .utils import build_response, feedback_to_response, get_his_message_str,get_browses_wc, get_clicks_wc
 from pypinyin import lazy_pinyin
@@ -46,6 +47,18 @@ def reorder(request):
         platform_idx = params.get('platform', 0)
         platform = PLATFORM_CHOICES[platform_idx][0]
         items = params.get('items', [])
+
+        # 批量写入浏览记录
+        for item in items:
+            Record.objects.create(
+                pid=pid,
+                platform=platform,
+                title=item.get('title', ''),
+                content='',
+                url='',
+                is_filter=True,
+            )
+
         from online_TwoStage.pipeline import run_two_stage_reorder
         order = run_two_stage_reorder(pid, platform, items)
         return build_response(SUCCESS, {"order": order})
@@ -360,112 +373,61 @@ def save_search(request): #ok
         return build_response(SUCCESS, None)
     return build_response(FAILURE, None)
 
-def get_alignment(request): #ok
-    """
-    获取用户偏好对齐信息
-    基于（之前已保存的）用户的浏览和点击记录，分析用户偏好并生成个性化响应（回复）
-    
-    Args:
-        request: Django HTTP请求对象，包含POST请求数据
-            - pid: 用户唯一标识符
-            - platform: 平台标识符
-            
-    Returns:
-        JsonResponse: 包含用户偏好和个性化响应的JSON响应
-            - personalities: 基于浏览记录分析的用户偏好
-            - response: 个性化对话响应
-    """
-    # 解析请求体中的JSON数据
-    data = json.loads(request.body)
-    # 获取平台类型并转换为数据库存储格式
-    platform = PLATFORM_CHOICES[data['platform']][0]
-    # 获取用户唯一标识符
-    pid = data['pid']
-    
-    # 查询用户在该平台上的浏览记录（已过滤的内容），按浏览时间倒序排列
-    browses = Record.objects.filter(pid=pid, platform=platform, is_filter=True).order_by('-browse_time')
-    
-    # 如果没有浏览记录，返回提示信息
-    if len(browses) == 0:
-        return build_response(SUCCESS, {"personalities": [], "response": "你最近没有浏览记录"})
-    
-    # 提取最近浏览记录的标题（最多10条）
-    browses_title = [browse.title for browse in browses[:min(10, len(browses))]]
-
-    # 从浏览记录中筛选出用户点击过的内容
-    clicks = browses.filter(click=True)
-    # 提取点击记录的标题（最多10条）
-    click_titles = [click.title for click in clicks[:min(10, len(clicks))]]
-    
-    try:
-        print("query one personalities...")
-        # 尝试获取用户现有的偏好记录
-        now_personality = Personalities.objects.filter(pid=pid, platform=platform).first()
-        
-        # 检查现有偏好记录是否仍然有效（浏览和点击时间都在偏好更新之前）
-        if browses[0].browse_time <= now_personality.update_time and clicks[0].click_time <= now_personality.update_time:
-            # 如果偏好记录仍然有效，直接返回现有数据
-            return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
-        else:
-            # 如果偏好记录已过期，重新分析用户偏好
-            
-            # 基于浏览记录分析用户偏好
-            personalities = get_simple_personalities_from_browses(browses=browses_title).strip()
-            
-            # 尝试从点击偏好记录中获取点击偏好
-            try:
-                personality_click = PersonalitiesClick.objects.filter(pid=pid, platform=platform).first().personality_click
-                assert len(personality_click)>0
-            except:
-                # 如果没有点击偏好记录，基于点击记录重新分析
-                if len(click_titles)>0:
-                    personality_click = get_simple_personalities_from_clicks(clicks=click_titles).strip()
-                else:
-                    personality_click=""     
-            
-            # 根据是否有点击记录生成不同的响应内容
-            if len(click_titles)>0:       
-                first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而根据你的**点击内容**，我猜你的偏好是\n{personality_click}\n\n 请问有什么可以帮助你的吗？"
-            else:
-                first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而你都没有点击, 是不是不喜欢这些内容？"
-
-            # 更新用户偏好记录
-            now_personality.personality_click = personality_click
-            now_personality.personality = personalities
-            now_personality.first_response = first_response
-            now_personality.save()
-            
-            # 返回更新后的偏好信息
-            return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
-    except:
-        # 如果获取现有偏好记录失败（用户第一次使用），创建新的偏好记录
-        
-        # 基于浏览记录分析用户偏好
-        personalities = get_simple_personalities_from_browses(browses=browses_title).strip()
-        
-        # 尝试获取点击偏好记录
-        try:
-            personality_click = PersonalitiesClick.objects.filter(pid=pid, platform=platform).first().personality_click
-            assert len(personality_click)>0
-        except:
-            # 如果没有点击偏好记录，基于点击记录重新分析
-            if (len(click_titles)>0):
-                personality_click = get_simple_personalities_from_clicks(clicks=click_titles).strip()
-            else:
-                personality_click=""
-        
-        # 根据是否有点击记录生成不同的响应内容
-        if len(click_titles)>0:       
-            first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而根据你的**点击内容**，我猜你的偏好是\n{personality_click}\n\n 请问有什么可以帮助你的吗？"
-        else:
-            first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而你都没有点击, 是不是不喜欢这些内容？"
-        
-        # 创建新的用户偏好记录
-        now_personality = Personalities(pid=pid, platform=platform, personality=personalities, personality_click=personality_click, first_response=first_response)
-        now_personality.save()
-        
-        # 返回新创建的偏好信息
-        return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
+# [已废弃] RAH 偏好对齐，已由 guided_chat/start + unit_interpret 替代
+# def get_alignment(request):
+#     """
+#     获取用户偏好对齐信息
+#     基于（之前已保存的）用户的浏览和点击记录，分析用户偏好并生成个性化响应（回复）
+#     """
+#     data = json.loads(request.body)
+#     platform = PLATFORM_CHOICES[data['platform']][0]
+#     pid = data['pid']
+#     browses = Record.objects.filter(pid=pid, platform=platform, is_filter=True).order_by('-browse_time')
+#     if len(browses) == 0:
+#         return build_response(SUCCESS, {"personalities": [], "response": "你最近没有浏览记录"})
+#     browses_title = [browse.title for browse in browses[:min(10, len(browses))]]
+#     clicks = browses.filter(click=True)
+#     click_titles = [click.title for click in clicks[:min(10, len(clicks))]]
+#     try:
+#         now_personality = Personalities.objects.filter(pid=pid, platform=platform).first()
+#         if browses[0].browse_time <= now_personality.update_time and clicks[0].click_time <= now_personality.update_time:
+#             return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
+#         else:
+#             personalities = get_simple_personalities_from_browses(browses=browses_title).strip()
+#             try:
+#                 personality_click = PersonalitiesClick.objects.filter(pid=pid, platform=platform).first().personality_click
+#                 assert len(personality_click)>0
+#             except:
+#                 if len(click_titles)>0:
+#                     personality_click = get_simple_personalities_from_clicks(clicks=click_titles).strip()
+#                 else:
+#                     personality_click=""
+#             if len(click_titles)>0:
+#                 first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而根据你的**点击内容**，我猜你的偏好是\n{personality_click}\n\n 请问有什么可以帮助你的吗？"
+#             else:
+#                 first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而你都没有点击, 是不是不喜欢这些内容？"
+#             now_personality.personality_click = personality_click
+#             now_personality.personality = personalities
+#             now_personality.first_response = first_response
+#             now_personality.save()
+#             return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
+#     except:
+#         personalities = get_simple_personalities_from_browses(browses=browses_title).strip()
+#         try:
+#             personality_click = PersonalitiesClick.objects.filter(pid=pid, platform=platform).first().personality_click
+#             assert len(personality_click)>0
+#         except:
+#             if (len(click_titles)>0):
+#                 personality_click = get_simple_personalities_from_clicks(clicks=click_titles).strip()
+#             else:
+#                 personality_click=""
+#         if len(click_titles)>0:
+#             first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而根据你的**点击内容**，我猜你的偏好是\n{personality_click}\n\n 请问有什么可以帮助你的吗？"
+#         else:
+#             first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而你都没有点击, 是不是不喜欢这些内容？"
+#         now_personality = Personalities(pid=pid, platform=platform, personality=personalities, personality_click=personality_click, first_response=first_response)
+#         now_personality.save()
+#         return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
 
 def get_feedback(request): #ok
     # 告诉用户近期基于规则{rule}过滤了如下内容：{content}，并询问“有什么问题吗”
