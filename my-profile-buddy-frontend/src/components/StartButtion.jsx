@@ -1,16 +1,17 @@
 // 最顶部的开关，Hi, {userPid}! Let's Go~
 
-import React from "react";
+import React, { useContext } from "react";
 import { Switch, Typography } from 'antd';
 import { Header } from 'antd/es/layout/layout';
 import { Link } from 'react-router-dom';
-import { userPid } from "../utils/Const";
+import UserContext from "../contexts/UserContext";
 
 
 const StartButton = (
   {isOpen,
   startFunction}
 )=>{
+    const userPid = useContext(UserContext);
     return (
         <Header style={{
           backgroundColor: "rgb(248, 250, 253)",

@@ -1,11 +1,12 @@
-import React, {useEffect, useState}from "react";
+import React, {useContext, useEffect, useState}from "react";
 import { List, Button, Layout, Select, Flex, Form, Modal, Typography } from 'antd';
 import './Profile.css';
 import TextArea from "antd/es/input/TextArea";
-import { backendUrl, platformOptions, userPid } from "../../utils/Const";
-import {getItem} from "../../utils/Chrome/getItem";   
+import { backendUrl, platformOptions } from "../../utils/Const";
+import {getItem} from "../../utils/Chrome/getItem";
 import {setItem} from "../../utils/Chrome/setItem";
 import { useLocation } from "react-router-dom";
+import UserContext from "../../contexts/UserContext";
 
 const { Content } = Layout;
 
@@ -109,6 +110,7 @@ const ProfileCard = (
 
 const Profile = (
 ) => {
+    const userPid = useContext(UserContext);
     const [nowData, setNowData] = useState([]);
     const [editable, setEditable] = useState([]);
     const location = useLocation();

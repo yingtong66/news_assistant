@@ -1,7 +1,8 @@
 const backendUrl = "http://localhost:8000" //客户端后端 (用户数据的处理分析)
-// const userPid = "大梦想家豪哥" //用户的id
-const userPid = "Hsyy04" //用户的id
-// const userPid = "DST" //
+let userPid = ""; // 从 chrome.storage 异步加载
+chrome.storage.sync.get("userPid", (result) => {
+  userPid = result.userPid || "";
+});
 function sendBackgroundRequest(type, data) {
   return new Promise((resolve, reject) => {
     if (!chrome?.runtime?.sendMessage) {

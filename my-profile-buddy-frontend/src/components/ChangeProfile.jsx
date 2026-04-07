@@ -37,12 +37,13 @@
 
 
 import { Button, Checkbox, Modal, Typography } from "antd";
-import React, {useEffect, useState} from "react";
-import { backendUrl, userPid } from "../utils/Const";
+import React, {useContext, useEffect, useState} from "react";
+import { backendUrl } from "../utils/Const";
 import { setItem } from "../utils/Chrome/setItem.js";
 import { useLocation } from "react-router-dom";
 import { getItem } from "../utils/Chrome/getItem.js";
 import botAvatar from "../images/bot-avatar.png";
+import UserContext from "../contexts/UserContext";
 
 const SearchItem = (
     {
@@ -197,6 +198,7 @@ const ChangeProfile = (
     const [nowData, setNowData] = useState([]);
     const [isConfirm, setIsConfirm] = useState(new Array(10).fill(true));
     const location = useLocation();
+    const userPid = useContext(UserContext);
 
     //防止编辑规则的时候误触确定
     const [isediting, setIsEditing] = useState(false);

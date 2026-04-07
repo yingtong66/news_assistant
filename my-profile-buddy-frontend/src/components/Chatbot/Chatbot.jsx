@@ -30,7 +30,7 @@
 ------------------------------------------------------------------ */
 
 
-import React, {useState, useRef, useEffect} from "react";
+import React, {useState, useRef, useEffect, useContext} from "react";
 import "./Chatbot.css";
 import userAvatar from "../../images/user-avatar.png";
 import botAvatar from "../../images/bot-avatar.png";
@@ -40,7 +40,8 @@ import ChatHeader from "./ChatHeader";
 import SessionList from "./SessionList";
 import { useLocation } from "react-router-dom";
 import ChangeProfile from "../ChangeProfile";
-import { backendUrl, taskOptions, userPid } from "../../utils/Const";
+import { backendUrl, taskOptions } from "../../utils/Const";
+import UserContext from "../../contexts/UserContext";
 import Markdown from 'react-markdown'
 const { Search } = Input;
 const Messages = ({allmessage}) => {
@@ -61,6 +62,7 @@ const Messages = ({allmessage}) => {
 const Chatbot = (
     {title}
 ) =>{
+    const userPid = useContext(UserContext);
     const [enabeld, setEnabled] = useState(true);
     const [message, setMessage] = useState("");
     const chatEndRef = useRef(null);

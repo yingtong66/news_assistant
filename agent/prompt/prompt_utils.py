@@ -28,16 +28,16 @@ def extract_code_blocks(markdown_text, language):
 def get_bailian_response(msg, model=MODEL):
     init_prompt  = [{"role":"system","content":"你是一个非常聪明有用的客服"}]
     msg = init_prompt + msg
-    response = dashscope.Generation.call(model, messages=msg)
+    response = dashscope.Generation.call(model, messages=msg, timeout=10)
     cnt_try = 0
     while response["status_code"] != HTTPStatus.OK and cnt_try < 2:
         time.sleep(1)
-        
+
         logger.error('Request id: %s, Status code: %s, error code: %s, error message: %s' % (
                 response.request_id, response.status_code,
                 response.code, response.message
         ))
-        response = dashscope.Generation.call(model, messages=msg)
+        response = dashscope.Generation.call(model, messages=msg, timeout=10)
         cnt_try+=1
     if response["status_code"] != HTTPStatus.OK:
         return "对不起，我无法帮助你"

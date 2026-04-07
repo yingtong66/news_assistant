@@ -1,4 +1,5 @@
 import json
+import time
 from django.http import JsonResponse
 from django.core import serializers
 import logging
@@ -126,10 +127,11 @@ def dialogue(request): #ok
     """与用户对话
     Args:
         request: Django HTTP请求对象，包含POST请求数据
-        
+
     Returns:
         JsonResponse: 包含对话响应、会话信息和操作列表的响应对象
     """
+    t_start = time.time()
     # 解析请求体中的JSON数据
     data = json.loads(request.body)
     sid = data['sid']  # 会话ID
@@ -227,6 +229,8 @@ def dialogue(request): #ok
         bot_message.save()
     
     # 构建并返回响应数据
+    elapsed = time.time() - t_start
+    logger.info("[Dialogue] 总耗时 %.2fs | pid=%s | 输入: %s", elapsed, pid, content[:60])
     return build_response(SUCCESS,{
         "content": response,  # 机器人响应内容
         "sid": session.id,    # 会话ID
@@ -745,6 +749,7 @@ def guided_chat_summarize(request):
     Returns:
         {actions: list} 格式与 /chatbot 一致，供前端弹窗确认
     """
+    t_start = time.time()
     data = json.loads(request.body)
     pid = data['pid']
     platform_idx = data['platform']
@@ -773,7 +778,8 @@ def guided_chat_summarize(request):
 
     if not actions:
         # 用户未表达偏好需求，直接用 get_fuzzy 返回的普通回复（已含规则上下文）
-        logger.info("[GuidedChat] summarize: 无操作，普通回复, pid=%s", pid)
+        elapsed = time.time() - t_start
+        logger.info("[GuidedChat] 总耗时 %.2fs | 无操作，普通回复 | pid=%s | 输入: %s", elapsed, pid, user_response[:60])
         return build_response(SUCCESS, {"actions": [], "sid": session.id, "content": response})
 
     # 创建 GenContentlog 日志记录（is_ac=False，等待用户确认）
@@ -804,7 +810,8 @@ def guided_chat_summarize(request):
             )
             action['log_id'] = gen.id
 
-    logger.info("[GuidedChat] summarize: 生成 %d 个操作, pid=%s, sid=%s", len(actions), pid, session.id)
+    elapsed = time.time() - t_start
+    logger.info("[GuidedChat] 总耗时 %.2fs | 生成 %d 个操作 | pid=%s | 输入: %s", elapsed, len(actions), pid, user_response[:60])
     return build_response(SUCCESS, {"actions": actions, "sid": session.id})
 
 # 被 Django 导入时就会执行：初始化 BackgroundScheduler、注册 job 并 scheduler.start()。通常在服务启动/第一次加载 views 时就会触发。
@@ -813,7 +820,6 @@ def guided_chat_summarize(request):
 from apscheduler.schedulers.background import BackgroundScheduler
 from django_apscheduler.jobstores import DjangoJobStore, register_events
 from apscheduler.triggers.interval import IntervalTrigger
-import time
 import datetime as dt
 from django_apscheduler.models import DjangoJobExecution
 from .rah import get_rah_personalities

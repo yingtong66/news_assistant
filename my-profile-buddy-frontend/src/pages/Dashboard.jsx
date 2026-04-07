@@ -1,12 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Button, Flex, Input, List, Modal, Select, Spin, Tag, Tooltip, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import TextArea from 'antd/es/input/TextArea';
 import { Form } from 'antd';
 import Markdown from 'react-markdown';
-import { backendUrl, platformOptions, userPid } from '../utils/Const';
+import { backendUrl, platformOptions } from '../utils/Const';
 import { getItem } from '../utils/Chrome/getItem';
 import { setItem } from '../utils/Chrome/setItem';
+import UserContext from '../contexts/UserContext';
 import ChangeProfile from '../components/ChangeProfile';
 import userAvatar from '../images/user-avatar.png';
 import botAvatar from '../images/bot-avatar.png';
@@ -173,6 +174,7 @@ const ProfileCard = ({ item, delFunc, saveFunc, toggleEdit, edit, isModalOpen, s
 
 // 主 Dashboard 页面
 const Dashboard = () => {
+    const userPid = useContext(UserContext);
     // ---- 历史偏好 ----
     const [personalities, setPersonalities] = useState('');
     const [prefLoading, setPrefLoading] = useState(true);
@@ -186,7 +188,8 @@ const Dashboard = () => {
         })
             .then(r => r.json())
             .then(data => {
-                setPersonalities(data['data']['personalities'] || '');
+                const p = data['data']['personalities'];
+                setPersonalities(typeof p === 'string' ? p : '');
                 setPrefLoading(false);
             })
             .catch(() => setPrefLoading(false));
@@ -221,7 +224,8 @@ const Dashboard = () => {
                 })
                     .then(r2 => r2.json())
                     .then(data2 => {
-                        setPersonalities(data2['data']['personalities'] || '');
+                        const p2 = data2['data']['personalities'];
+                        setPersonalities(typeof p2 === 'string' ? p2 : '');
                         setPrefLoading(false);
                     })
                     .catch(() => setPrefLoading(false));

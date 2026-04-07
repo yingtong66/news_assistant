@@ -1,5 +1,61 @@
 # DEVLOG
 
+## 2026-04-07 用户 UID 注册/登录功能
+
+### 背景
+原来 `userPid` 硬编码为 `"Hsyy04"`，多用户测试时需要每次手动改代码。目标：首次使用弹出注册页让用户输入用户名，之后自动登录。
+
+### 实现方案
+- 新建 `src/contexts/UserContext.js`：React Context，全局传递 `userPid`
+- 新建 `src/pages/RegisterPage.jsx`：首次使用的注册界面（输入框 + 确认按钮，无密码）
+- `App.js` 顶层用 `await getItem('userPid', null)` 读取 storage；无值则渲染注册页，注册完成后存入 `chrome.storage.sync` 并跳转 `/home`
+- 5 个组件（`StartButton`、`Dashboard`、`ChangeProfile`、`Profile`、`Chatbot`）改为 `useContext(UserContext)` 读取 pid，不再从 `Const.js` import
+- `public/contents/zhihu.js` 改为 `chrome.storage.sync.get("userPid", ...)` 异步读取
+
+### 数据持久化说明
+- pid 存在 `chrome.storage.sync`，浏览器关闭后保留，重启自动登录
+- 卸载重装插件后 storage 清空，重新输入同一 uid 即可找回后端所有数据（数据在 SQLite，不受前端影响）
+- Django 管理面板"用户"是 Django auth 系统，与业务 pid 无关；pid 数据在 AGENT 下的规则/记录等表中查找
+
+### 删除旧 uid 方法
+在 background service worker 控制台执行：
+```js
+chrome.storage.sync.remove('userPid', () => console.log('done'))
+```
+
+### 调试过程中遇到的 bug 及修复
+
+**1. personalities 不是字符串导致崩溃**
+- 新用户后端返回 `personalities: null`（Python None → JSON null），JS 的 `|| ''` 对 `null` 有效，但 `[]`/`{}` 是 truthy 会绕过
+- `Dashboard.jsx` 的 `.split('\n')` 对非字符串抛 `TypeError: t.split is not a function`，React 渲染阶段崩溃变白屏
+- 修复：`typeof p === 'string' ? p : ''`，两处（初始加载 + 刷新按钮）均修复
+
+**2. 注册完成后显示空白页**
+- 注册后 `isOpen` 默认 `false`，路由停在 `/`（EmptyPage），用户误以为闪退
+- 修复：`onRegister` 回调里同时设 `isOpen=true` 并 `navigate("/home")`
+
+**3. 注册页宽度异常**
+- 注册页提前 return，绕过了 `App.js` 里 `width:750px` 的容器
+- 修复：RegisterPage 自身 div 加 `width: 750`
+
+### LLM 调用 timeout 优化
+- `agent/prompt/prompt_utils.py` 的 `dashscope.Generation.call()` 原来没有 timeout
+- DNS 解析失败时系统级超时约 20-30 秒才报错，导致总耗时 57 秒
+- 修复：所有 `Generation.call()` 加 `timeout=10`，失败快速重试
+
+## 2026-04-07 数据库迁移
+
+- 执行 `python manage.py makemigrations` + `migrate`，应用 `0023_alter_chilog_platform_...` 迁移（platform 字段变更）
+
+## 2026-04-07 后端响应计时日志
+
+- `agent/views.py` 在 `dialogue()` 和 `guided_chat_summarize()` 入口加 `t_start = time.time()`
+- 函数返回前输出 `[Dialogue] 总耗时 Xs | pid=... | 输入: ...` 日志，方便测量用户输入到回复的端到端耗时
+
+## 2026-04-07 README 目录结构补充
+
+- README.md 新增"项目目录结构"章节，记录各文件夹作用（agent/、news_assistant/、online_TwoStage/、offline_TwoStage/、my-profile-buddy-frontend/、scripts/）
+
 ## 2026-04-06 历史偏好模块：unit_interpret 接入引导流程
 
 ### 新增 online_TwoStage/unit_interpret/ 模块

@@ -5,17 +5,21 @@ import ProfileAlignment from './pages/ProfileAlignment';
 import Feedback from './pages/Feedback';
 import Profile from './pages/Profile/Profile';
 import EmptyPage from './pages/EmptyPage';
+import RegisterPage from './pages/RegisterPage';
 import StartButton from './components/StartButtion';
 import { Content } from 'antd/es/layout/layout';
 import {getItem} from './utils/Chrome/getItem.js';
-import { backendUrl, userPid } from './utils/Const.js';
+import { backendUrl } from './utils/Const.js';
+import UserContext from './contexts/UserContext.js';
 
 const hisOpen = await getItem('isOpen');
+const storedPid = await getItem('userPid', null);
 console.log(hisOpen);
 console.log("his length is "+window.history.length);
 
 function App() {
   const [isOpen, setIsOpen] = useState(hisOpen);
+  const [userPid, setUserPid] = useState(storedPid || "");
   const navigate = useNavigate();
   const location = useLocation();
   useEffect(() => {
@@ -42,8 +46,19 @@ function App() {
     });
   }
 
+  // 未注册时显示注册页
+  if (!userPid) {
+    return <RegisterPage onRegister={async (pid) => {
+      // 注册完成后自动开启并跳转 /home
+      chrome.storage && chrome.storage.sync.set({ isOpen: true });
+      setIsOpen(true);
+      setUserPid(pid);
+      navigate("/home");
+    }} />;
+  }
+
   return (
-    <>
+    <UserContext.Provider value={userPid}>
       {/* <Typography.Text keyboard> 已经打开: {count}s </Typography.Text> */}
       <Content style={{width:"750px", paddingInline:10}}>
       {
@@ -57,7 +72,7 @@ function App() {
             <Route path="/" element={<EmptyPage></EmptyPage>}></Route>
           </Routes>
       </Content>
-    </>
+    </UserContext.Provider>
   );
 }
 
