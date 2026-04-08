@@ -298,12 +298,22 @@ function cleanToutiaoNonArticles() {
   // 删除顶部搜索/header 区域
   document.querySelectorAll('.header-right').forEach(el => el.remove());
   document.querySelectorAll('.search-container').forEach(el => el.remove());
+  // 删除顶部整行（下载头条APP、添加到桌面、关于头条、反馈、侵权投诉）
+  document.querySelectorAll('.toutiao-header .header-left').forEach(el => el.remove());
   // 删除视频类卡片（小视频）
   document.querySelectorAll('.feed-card-video-wrapper').forEach(el => el.remove());
   // 删除微头条/动态类卡片
   document.querySelectorAll('.feed-card-wtt-wrapper').forEach(el => el.remove());
   // 兜底：删除所有非图文的 feed-card-wrapper
   document.querySelectorAll('.feed-card-wrapper:not(.feed-card-article-wrapper)').forEach(el => el.remove());
+  // 右侧栏删除后，让列表居中
+  const style = document.getElementById('mpb-center-style');
+  if (!style) {
+    const s = document.createElement('style');
+    s.id = 'mpb-center-style';
+    s.textContent = '.main-content { display: flex; justify-content: center; } .left-container { margin: 0 auto; }';
+    document.head.appendChild(s);
+  }
 }
 
 async function setupFeedObserver(options) {

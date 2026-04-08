@@ -373,6 +373,16 @@ def save_search(request): #ok
         return build_response(SUCCESS, None)
     return build_response(FAILURE, None)
 
+# 从 Personalities 缓存读取偏好摘要，供 Dashboard 历史偏好区展示
+def get_alignment(request):
+    data = json.loads(request.body)
+    pid = data['pid']
+    platform = PLATFORM_CHOICES[data['platform']][0]
+    personality = Personalities.objects.filter(pid=pid, platform=platform).first()
+    personalities = personality.personality if personality and personality.personality else ''
+    return build_response(SUCCESS, {"personalities": personalities})
+
+
 # [已废弃] RAH 偏好对齐，已由 guided_chat/start + unit_interpret 替代
 # def get_alignment(request):
 #     """

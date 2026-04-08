@@ -48,7 +48,7 @@ def run_filtering(items, negative_group):
     logger.info("[TwoStage-过滤] 输入 %d 个候选, 规则: %s", len(items), negative_group)
 
     response_text = get_bailian_response(msg)
-    logger.info("[TwoStage-过滤] LLM原始响应:\n%s", response_text)
+    # logger.info("[TwoStage-过滤] LLM原始响应:\n%s", response_text)
 
     result = parse_json_from_response(response_text)
     if result is None:
@@ -85,7 +85,7 @@ def run_reranking(items, positive_group):
     logger.info("[TwoStage-重排] 输入 %d 个候选, 偏好: %s", len(items), positive_group if positive_group else "(无)")
 
     response_text = get_bailian_response(msg)
-    # logger.info("[TwoStage-重排] LLM原始响应:\n%s", response_text)
+    logger.info("[TwoStage-重排] LLM原始响应:\n%s", response_text)
 
     result = parse_json_from_response(response_text)
     if result is None:

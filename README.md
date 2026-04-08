@@ -136,7 +136,7 @@ POST /guided_chat/summarize
 | `/guided_chat/summarize` | POST | 用户回答引导语后生成规则建议 |
 | `/save_rules` | POST | 新增/更新/删除规则 |
 | `/get_rules` | GET | 获取用户当前规则列表 |
-| `/get_alignment` | POST | 获取用户偏好摘要（旧版，供 Dashboard 标签展示用） |
+| `/get_alignment` | POST | 获取 Personalities 缓存中的偏好摘要，供 Dashboard 历史偏好区展示 |
 | `/make_new_message` | POST | 用户确认规则后续对话 |
 | `/record_user` | POST | 上传本地规则到后端 |
 

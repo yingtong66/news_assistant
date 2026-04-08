@@ -1,5 +1,38 @@
 # DEVLOG
 
+## 2026-04-08 重排 prompt 两轮调优
+
+### 问题
+- 第一轮：rerank 输出完全原序，LLM 认为没有内容匹配"体育新闻"偏好（CBA/篮球/乒乓球均未匹配）
+- 原因：prompt 规则写了"判断要严格，不要过度联想"，LLM 触发"无匹配则保持原序"兜底逻辑
+
+### 第一轮修复（不够）
+- 放宽规则1为"包括具体运动、赛事、球队、球员等均视为匹配"
+- 问题：写死了体育相关词汇，政治/娱乐场景失效
+
+### 第二轮修复（不够）
+- 改为通用表述"包括该话题的具体人物、事件、赛事、动态等，宁可多匹配"
+- 问题：LLM 反而误匹配——id=1"伊朗：感谢中俄"被排第1（因含"俄"字），id=14"篮球国手离婚"未匹配（LLM 判断主旨是娱乐八卦）
+
+### 第三轮修复（当前）
+- 核心思路：匹配基于标题表面关键词，不分析文章主旨
+- 规则1：只要标题出现偏好相关的人物名/事件名即匹配（如运动员姓名=体育匹配）
+- 规则2：反向约束，间接提及不算匹配（"俄罗斯"≠"俄乌战争"）
+- 开启重排 LLM 原始响应日志，便于排查
+
+## 2026-04-08 头条页面顶部栏清理 + 列表居中
+
+- 删除头条顶部导航行（下载头条APP、添加到桌面、关于头条、反馈、侵权投诉）：删除 `.toutiao-header .header-left`
+- 右侧栏删除后列表靠左，通过注入 CSS 让列表居中：`.main-content { display:flex; justify-content:center }` + `.left-container { margin: 0 auto }`
+- 样式通过 `<style id="mpb-center-style">` 注入，避免重复添加
+
+## 2026-04-08 修复历史偏好区空白问题
+
+- `/get_alignment` 端点被注释掉，但 `Dashboard.jsx` 仍在调用，导致 404，历史偏好区始终显示"暂时还没有足够的浏览记录"
+- 在 `agent/views.py` 新增轻量版 `get_alignment`，直接从 `Personalities` 缓存读 `personality` 字段返回
+- 在 `agent/urls.py` 恢复 `path("get_alignment", get_alignment)` 注册
+- 删除冗余文档 `HISTORY_PREFERENCE_ANALYSIS.md`、`HISTORY_PREFERENCE_DETAILED.md`、`QUICK_REFERENCE.txt`
+
 ## 2026-04-08 废弃 RAH 偏好对齐 + reorder 批量写入浏览记录
 
 ### 废弃 get_alignment
