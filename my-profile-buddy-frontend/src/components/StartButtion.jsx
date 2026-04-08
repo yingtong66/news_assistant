@@ -1,63 +1,35 @@
 // 最顶部的开关，Hi, {userPid}! Let's Go~
 
-import React from "react";
+import React, { useContext } from "react";
 import { Switch, Typography } from 'antd';
 import { Header } from 'antd/es/layout/layout';
 import { Link } from 'react-router-dom';
-import { userPid } from "../utils/Const";
+import UserContext from "../contexts/UserContext";
 
 
 const StartButton = (
   {isOpen,
   startFunction}
 )=>{
+    const userPid = useContext(UserContext);
+    // 开启状态下不渲染（由 Dashboard 标题栏显示开关）
+    if (isOpen) return null;
+    // 关闭状态下只显示开关按钮
     return (
-        <Header style={{
-          backgroundColor: "rgb(248, 250, 253)",
-          padding:0,
-          width:"100%",
-          textAlign: "center",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexDirection: "row",
+        <div style={{
+          padding: '16px',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
         }}>
-              {/* <Typography.Text
-                level={6}
-                style={{
-                  margin: 0,
-                  padding: 0,
-                  flex: 1,
-                  marginLeft: 20,
-                }}
-                >
-                ProfileBuddy
-              </Typography.Text> */}
-
-              <Typography.Title
-                level={4}
-                style={{
-                  margin: 0,
-                  padding: 0,
-                  flex: 5,
-                  marginLeft: 20,
-                }}
-                >
-                Hi, {userPid}! Let's Go~{" "}
-              </Typography.Title>
-              
-              <Switch
-                checked = {isOpen}
-                onChange={startFunction}
-                checkedChildren={<Link to="/home">On</Link>}
-                unCheckedChildre={<Link to="/">off</Link>}
-                style={{
-                  padding: 0,
-                  flex: 1,
-                  marginRight:50,
-                }}
-                />
-        </Header>
+            <Typography.Text style={{ marginRight: 12 }}>点击开启推荐助手</Typography.Text>
+            <Switch
+              checked={isOpen}
+              onChange={startFunction}
+              checkedChildren={<Link to="/home">On</Link>}
+              unCheckedChildren={<Link to="/">Off</Link>}
+            />
+        </div>
     );
 }
 

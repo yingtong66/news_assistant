@@ -52,7 +52,7 @@ def run_filtering(items, negative_group):
 
     result = parse_json_from_response(response_text)
     if result is None:
-        logger.warning("[TwoStage-过滤] 响应解析失败，回退全量保留 %d 条", len(items))
+        logger.warning("[TwoStage-过滤] 响应解析失败，回退全量保留 %d 条。", len(items))
         return items, []
 
     filtered_list = result.get('filtered_list', [])
@@ -85,7 +85,7 @@ def run_reranking(items, positive_group):
     logger.info("[TwoStage-重排] 输入 %d 个候选, 偏好: %s", len(items), positive_group if positive_group else "(无)")
 
     response_text = get_bailian_response(msg)
-    # logger.info("[TwoStage-重排] LLM原始响应:\n%s", response_text)
+    logger.info("[TwoStage-重排] LLM原始响应:\n%s", response_text)
 
     result = parse_json_from_response(response_text)
     if result is None:
@@ -141,22 +141,17 @@ def run_two_stage_reorder(pid, platform, items):
             seen.add(rid)
             rerank_order.append(rid)
 
-    # 被过滤掉的追加到末尾
-    removed_order = []
-    for rid in all_ids:
-        if rid not in seen:
-            seen.add(rid)
-            removed_order.append(rid)
+    # 被过滤掉的直接丢弃，不再展示
+    removed_order = [rid for rid in all_ids if rid not in seen]
+    final_order = rerank_order
 
-    final_order = rerank_order + removed_order
-
-    logger.info("[TwoStage] === 完成 === 共 %d 条", len(final_order))
+    logger.info("[TwoStage] === 完成 === 共 %d 条 (过滤掉 %d 条)", len(final_order), len(removed_order))
     logger.info("[TwoStage] 正向规则: %s", positive_group if positive_group else "(无)")
     logger.info("[TwoStage] rerank_list (%d 条):", len(rerank_order))
     for i, rid in enumerate(rerank_order, 1):
         logger.info("  %d. id=%s title=%s", i, rid, id_to_title.get(rid, ''))
     logger.info("[TwoStage] 负向规则: %s", negative_group if negative_group else "(无)")
-    logger.info("[TwoStage] removed_list (%d 条, 排末尾):", len(removed_order))
+    logger.info("[TwoStage] removed_list (%d 条, 已过滤):", len(removed_order))
     for i, rid in enumerate(removed_order, 1):
         logger.info("  %d. id=%s title=%s", i, rid, id_to_title.get(rid, ''))
     return final_order

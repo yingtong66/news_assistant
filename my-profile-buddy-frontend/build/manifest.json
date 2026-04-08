@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "news_assistant",
+  "version": "2.0",
+  "description": "news_assistant bridges the gap between you and personalized algorithms, providing tailored recommendations and friendly interactions, making technology feel like a true companion.",
+  "icons": {
+    "16": "icons/logo.png",
+    "32": "icons/logo.png",
+    "48": "icons/logo.png",
+    "128": "icons/logo.png"
+  },
+  "action": {
+    "default_popup": "index.html"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "contents/zhihu.js"
+      ],
+      "matches": [
+        "https://www.zhihu.com/*",
+        "https://www.bilibili.com/*",
+        "https://www.toutiao.com/*"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "contents/constants.js"
+      ],
+      "matches": [
+        "https://www.zhihu.com/*"
+      ]
+    }
+  ],
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background/zhihu.js"
+  },
+  "host_permissions": [
+    "http://47.113.200.248:8000/*",
+    "http://localhost:8000/*"
+  ]
+}

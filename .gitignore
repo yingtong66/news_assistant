@@ -11,3 +11,5 @@ logs/*
 .venv
 .claude
 .output
+.DS_Store
+今日头条*

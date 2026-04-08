@@ -1,11 +1,12 @@
-import React, {useEffect, useState}from "react";
+import React, {useContext, useEffect, useState}from "react";
 import { List, Button, Layout, Select, Flex, Form, Modal, Typography } from 'antd';
 import './Profile.css';
 import TextArea from "antd/es/input/TextArea";
-import { backendUrl, platformOptions, userPid } from "../../utils/Const";
-import {getItem} from "../../utils/Chrome/getItem";   
+import { backendUrl } from "../../utils/Const";
+import {getItem} from "../../utils/Chrome/getItem";
 import {setItem} from "../../utils/Chrome/setItem";
 import { useLocation } from "react-router-dom";
+import UserContext from "../../contexts/UserContext";
 
 const { Content } = Layout;
 
@@ -48,12 +49,6 @@ const ProfileCard = (
             isactive: e,
         }));
     }
-    const handlePlatformChange = (e) => {
-        setFormData(prevState => ({
-          ...prevState,
-            platform: e,
-        }));
-    }
 
     return (
         <Form>
@@ -81,13 +76,6 @@ const ProfileCard = (
                     确定删除<Typography.Text keyboard>{formData.rule}</Typography.Text>
                 </Modal>
                 <Select
-                    name="platform"
-                    value={formData.platform}
-                    options={platformOptions}
-                    disabled={!edit}
-                    onChange={handlePlatformChange}
-                    />
-                <Select
                     name="isactive"
                     value={formData.isactive}
                     options={[{
@@ -109,6 +97,7 @@ const ProfileCard = (
 
 const Profile = (
 ) => {
+    const userPid = useContext(UserContext);
     const [nowData, setNowData] = useState([]);
     const [editable, setEditable] = useState([]);
     const location = useLocation();

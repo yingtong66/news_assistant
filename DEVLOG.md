@@ -1,5 +1,169 @@
 # DEVLOG
 
+## 2026-04-08 重排 prompt 两轮调优
+
+### 问题
+- 第一轮：rerank 输出完全原序，LLM 认为没有内容匹配"体育新闻"偏好（CBA/篮球/乒乓球均未匹配）
+- 原因：prompt 规则写了"判断要严格，不要过度联想"，LLM 触发"无匹配则保持原序"兜底逻辑
+
+### 第一轮修复（不够）
+- 放宽规则1为"包括具体运动、赛事、球队、球员等均视为匹配"
+- 问题：写死了体育相关词汇，政治/娱乐场景失效
+
+### 第二轮修复（不够）
+- 改为通用表述"包括该话题的具体人物、事件、赛事、动态等，宁可多匹配"
+- 问题：LLM 反而误匹配——id=1"伊朗：感谢中俄"被排第1（因含"俄"字），id=14"篮球国手离婚"未匹配（LLM 判断主旨是娱乐八卦）
+
+### 第三轮修复（当前）
+- 核心思路：匹配基于标题表面关键词，不分析文章主旨
+- 规则1：只要标题出现偏好相关的人物名/事件名即匹配（如运动员姓名=体育匹配）
+- 规则2：反向约束，间接提及不算匹配（"俄罗斯"≠"俄乌战争"）
+- 开启重排 LLM 原始响应日志，便于排查
+
+## 2026-04-08 头条页面顶部栏清理 + 列表居中
+
+- 删除头条顶部导航行（下载头条APP、添加到桌面、关于头条、反馈、侵权投诉）：删除 `.toutiao-header .header-left`
+- 右侧栏删除后列表靠左，通过注入 CSS 让列表居中：`.main-content { display:flex; justify-content:center }` + `.left-container { margin: 0 auto }`
+- 样式通过 `<style id="mpb-center-style">` 注入，避免重复添加
+
+## 2026-04-08 修复历史偏好区空白问题
+
+- `/get_alignment` 端点被注释掉，但 `Dashboard.jsx` 仍在调用，导致 404，历史偏好区始终显示"暂时还没有足够的浏览记录"
+- 在 `agent/views.py` 新增轻量版 `get_alignment`，直接从 `Personalities` 缓存读 `personality` 字段返回
+- 在 `agent/urls.py` 恢复 `path("get_alignment", get_alignment)` 注册
+- 删除冗余文档 `HISTORY_PREFERENCE_ANALYSIS.md`、`HISTORY_PREFERENCE_DETAILED.md`、`QUICK_REFERENCE.txt`
+
+## 2026-04-08 废弃 RAH 偏好对齐 + reorder 批量写入浏览记录
+
+### 废弃 get_alignment
+- 注释掉 `views.py` 的 `get_alignment` 函数和 `alignment` 模块 import
+- 注释掉 `urls.py` 的 `/get_alignment` 路由
+- 该功能已由 `guided_chat/start` + `unit_interpret` 替代，`alignment.py` 文件保留备参考
+
+### 浏览记录改由 /reorder 批量写入
+- 之前 `/browse` 请求被注释掉后，Record 表不再有浏览记录，导致点击记录也失效
+- 在 `views.py` 的 `reorder` 函数中，重排前批量 `Record.objects.create()` 写入这批卡片的浏览记录
+- 前端 `zhihu.js` 的 `processElement` 不再发送任何后端请求，只负责提取标题
+
+## 2026-04-07 头条页面非图文元素清理
+
+- `zhihu.js` 新增 `cleanToutiaoNonArticles()` 函数，删除头条页面中所有非图文元素：
+  - `.right-container` (右侧栏：热搜榜、安全课堂、热门视频)
+  - `.home-banner-wrapper` (要闻 banner)
+  - `.main-nav-wrapper` (导航栏)
+  - `.feed-five-wrapper` (五条推荐区块)
+  - `.fix-header` (固定顶栏)
+  - `.header-right` / `.search-container` (搜索区域)
+  - `.feed-card-video-wrapper` (小视频卡片)
+  - `.feed-card-wtt-wrapper` (微头条/动态卡片)
+  - `.feed-card-wrapper:not(.feed-card-article-wrapper)` (兜底：所有非图文卡片)
+- 在页面初始加载和每批重排完成后调用
+- MutationObserver 中新增动态拦截：新插入的非图文卡片(`.feed-card-wrapper:not(.feed-card-article-wrapper)`)立即删除，防止动态加载的视频/微头条逃脱清理
+
+## 2026-04-07 前端适配过滤条目移除
+
+- 后端 `pipeline.py` 改为过滤条目不返回后，`order.length < liveNodes.length`，前端 `zhihu.js` 的 `order.length !== liveNodes.length` 严格校验导致重排完全不执行
+- 修复：去掉长度严格相等校验，改为 `order.length === 0` 时才放弃
+- order 中没出现的 id 对应的卡片 `display:none` 隐藏，不再展示在页面上
+- 保留的卡片按 order 顺序重新插入
+
+## 2026-04-07 去掉规则卡片的平台选择下拉框
+
+- 当前只需要头条平台，移除规则卡片上的平台 Select 下拉框
+- `Dashboard.jsx`: 删除平台 Select、移除 `platformOptions` import 和 `handlePlatformChange`
+- `Profile.jsx`: 同上
+- 新建规则 platform 默认为 0（头条），不受影响
+
+## 2026-04-07 历史偏好区增加折叠/展开功能
+
+- `Dashboard.jsx` 的 `HistoryPreference` 组件新增 `collapsed` state，点击标题可折叠/展开
+- 折叠时隐藏偏好标签和刷新按钮，只保留标题行，节省纵向空间
+- 标题右侧显示 `DownOutlined`/`UpOutlined` 箭头图标指示当前状态
+- 新增 import `DownOutlined, UpOutlined` from `@ant-design/icons`
+
+## 2026-04-07 过滤条目不再展示
+
+- `online_TwoStage/pipeline.py`: 被 removed_list 过滤掉的条目不再追加到 final_order 末尾，直接从返回结果中移除
+- 之前: `final_order = rerank_order + removed_order`，过滤的排到组内最后
+- 现在: `final_order = rerank_order`，过滤的彻底不展示
+- 日志仍记录被过滤条目，方便排查
+
+## 2026-04-07 UI 调整：去掉顶部黑色标题 + 开关按钮迁移 + 头条非图文元素清理
+
+### manifest.json 清理
+- 删除 `_comments` 字段，消除 Chrome "Unrecognized manifest key '_comments'" 警告
+
+### 去掉顶部黑色 "Hi, xxx! Let's Go~" 模块
+- `StartButtion.jsx`：开启状态下返回 null，不再渲染黑色标题栏；关闭状态下只显示"点击开启推荐助手"文字 + Off 开关按钮
+- `Dashboard.jsx`：蓝色标题行改为 flex 布局，右侧放置 On/Off 开关按钮（从 StartButton 迁入）
+- `App.js`：把 `isOpen` 和 `openBuddy` 作为 props 传给 Dashboard
+
+### 头条页面非图文元素自动清理
+- `zhihu.js` 新增 `cleanToutiaoNonArticles()` 函数，重排后自动删除：
+  - `.ttp-feed-module` 容器内非 `feed-card-article-wrapper` 的子元素
+  - 顶部要闻 banner (`.home-banner-wrapper`)
+  - 安全课堂 (`.security-course-wrapper`)
+  - 右侧热搜榜 (`.home-hotboard`)
+  - 顶部导航栏 (`.main-nav-wrapper`)
+  - 五条推荐区块 (`.feed-five-wrapper`)
+- 在两个时机调用：页面初始加载时、每批重排完成后
+
+## 2026-04-07 用户 UID 注册/登录功能
+
+### 背景
+原来 `userPid` 硬编码为 `"Hsyy04"`，多用户测试时需要每次手动改代码。目标：首次使用弹出注册页让用户输入用户名，之后自动登录。
+
+### 实现方案
+- 新建 `src/contexts/UserContext.js`：React Context，全局传递 `userPid`
+- 新建 `src/pages/RegisterPage.jsx`：首次使用的注册界面（输入框 + 确认按钮，无密码）
+- `App.js` 顶层用 `await getItem('userPid', null)` 读取 storage；无值则渲染注册页，注册完成后存入 `chrome.storage.sync` 并跳转 `/home`
+- 5 个组件（`StartButton`、`Dashboard`、`ChangeProfile`、`Profile`、`Chatbot`）改为 `useContext(UserContext)` 读取 pid，不再从 `Const.js` import
+- `public/contents/zhihu.js` 改为 `chrome.storage.sync.get("userPid", ...)` 异步读取
+
+### 数据持久化说明
+- pid 存在 `chrome.storage.sync`，浏览器关闭后保留，重启自动登录
+- 卸载重装插件后 storage 清空，重新输入同一 uid 即可找回后端所有数据（数据在 SQLite，不受前端影响）
+- Django 管理面板"用户"是 Django auth 系统，与业务 pid 无关；pid 数据在 AGENT 下的规则/记录等表中查找
+
+### 删除旧 uid 方法
+在 background service worker 控制台执行：
+```js
+chrome.storage.sync.remove('userPid', () => console.log('done'))
+```
+
+### 调试过程中遇到的 bug 及修复
+
+**1. personalities 不是字符串导致崩溃**
+- 新用户后端返回 `personalities: null`（Python None → JSON null），JS 的 `|| ''` 对 `null` 有效，但 `[]`/`{}` 是 truthy 会绕过
+- `Dashboard.jsx` 的 `.split('\n')` 对非字符串抛 `TypeError: t.split is not a function`，React 渲染阶段崩溃变白屏
+- 修复：`typeof p === 'string' ? p : ''`，两处（初始加载 + 刷新按钮）均修复
+
+**2. 注册完成后显示空白页**
+- 注册后 `isOpen` 默认 `false`，路由停在 `/`（EmptyPage），用户误以为闪退
+- 修复：`onRegister` 回调里同时设 `isOpen=true` 并 `navigate("/home")`
+
+**3. 注册页宽度异常**
+- 注册页提前 return，绕过了 `App.js` 里 `width:750px` 的容器
+- 修复：RegisterPage 自身 div 加 `width: 750`
+
+### LLM 调用 timeout 优化
+- `agent/prompt/prompt_utils.py` 的 `dashscope.Generation.call()` 原来没有 timeout
+- DNS 解析失败时系统级超时约 20-30 秒才报错，导致总耗时 57 秒
+- 修复：所有 `Generation.call()` 加 `timeout=10`，失败快速重试
+
+## 2026-04-07 数据库迁移
+
+- 执行 `python manage.py makemigrations` + `migrate`，应用 `0023_alter_chilog_platform_...` 迁移（platform 字段变更）
+
+## 2026-04-07 后端响应计时日志
+
+- `agent/views.py` 在 `dialogue()` 和 `guided_chat_summarize()` 入口加 `t_start = time.time()`
+- 函数返回前输出 `[Dialogue] 总耗时 Xs | pid=... | 输入: ...` 日志，方便测量用户输入到回复的端到端耗时
+
+## 2026-04-07 README 目录结构补充
+
+- README.md 新增"项目目录结构"章节，记录各文件夹作用（agent/、news_assistant/、online_TwoStage/、offline_TwoStage/、my-profile-buddy-frontend/、scripts/）
+
 ## 2026-04-06 历史偏好模块：unit_interpret 接入引导流程
 
 ### 新增 online_TwoStage/unit_interpret/ 模块

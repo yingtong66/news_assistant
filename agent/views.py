@@ -1,4 +1,5 @@
 import json
+import time
 from django.http import JsonResponse
 from django.core import serializers
 import logging
@@ -10,7 +11,8 @@ from .models import *
 import random
 from .prompt.filter import filter_item
 from .prompt.fuzzy import get_fuzzy
-from .prompt.alignment import get_simple_personalities_from_browses, get_simple_personalities_from_clicks
+# [已废弃] RAH 偏好对齐，已由 guided_chat/start + unit_interpret 替代
+# from .prompt.alignment import get_simple_personalities_from_browses, get_simple_personalities_from_clicks
 
 from .utils import build_response, feedback_to_response, get_his_message_str,get_browses_wc, get_clicks_wc
 from pypinyin import lazy_pinyin
@@ -45,6 +47,18 @@ def reorder(request):
         platform_idx = params.get('platform', 0)
         platform = PLATFORM_CHOICES[platform_idx][0]
         items = params.get('items', [])
+
+        # 批量写入浏览记录
+        for item in items:
+            Record.objects.create(
+                pid=pid,
+                platform=platform,
+                title=item.get('title', ''),
+                content='',
+                url='',
+                is_filter=True,
+            )
+
         from online_TwoStage.pipeline import run_two_stage_reorder
         order = run_two_stage_reorder(pid, platform, items)
         return build_response(SUCCESS, {"order": order})
@@ -126,10 +140,11 @@ def dialogue(request): #ok
     """与用户对话
     Args:
         request: Django HTTP请求对象，包含POST请求数据
-        
+
     Returns:
         JsonResponse: 包含对话响应、会话信息和操作列表的响应对象
     """
+    t_start = time.time()
     # 解析请求体中的JSON数据
     data = json.loads(request.body)
     sid = data['sid']  # 会话ID
@@ -227,6 +242,8 @@ def dialogue(request): #ok
         bot_message.save()
     
     # 构建并返回响应数据
+    elapsed = time.time() - t_start
+    logger.info("[Dialogue] 总耗时 %.2fs | pid=%s | 输入: %s", elapsed, pid, content[:60])
     return build_response(SUCCESS,{
         "content": response,  # 机器人响应内容
         "sid": session.id,    # 会话ID
@@ -356,112 +373,71 @@ def save_search(request): #ok
         return build_response(SUCCESS, None)
     return build_response(FAILURE, None)
 
-def get_alignment(request): #ok
-    """
-    获取用户偏好对齐信息
-    基于（之前已保存的）用户的浏览和点击记录，分析用户偏好并生成个性化响应（回复）
-    
-    Args:
-        request: Django HTTP请求对象，包含POST请求数据
-            - pid: 用户唯一标识符
-            - platform: 平台标识符
-            
-    Returns:
-        JsonResponse: 包含用户偏好和个性化响应的JSON响应
-            - personalities: 基于浏览记录分析的用户偏好
-            - response: 个性化对话响应
-    """
-    # 解析请求体中的JSON数据
+# 从 Personalities 缓存读取偏好摘要，供 Dashboard 历史偏好区展示
+def get_alignment(request):
     data = json.loads(request.body)
-    # 获取平台类型并转换为数据库存储格式
-    platform = PLATFORM_CHOICES[data['platform']][0]
-    # 获取用户唯一标识符
     pid = data['pid']
-    
-    # 查询用户在该平台上的浏览记录（已过滤的内容），按浏览时间倒序排列
-    browses = Record.objects.filter(pid=pid, platform=platform, is_filter=True).order_by('-browse_time')
-    
-    # 如果没有浏览记录，返回提示信息
-    if len(browses) == 0:
-        return build_response(SUCCESS, {"personalities": [], "response": "你最近没有浏览记录"})
-    
-    # 提取最近浏览记录的标题（最多10条）
-    browses_title = [browse.title for browse in browses[:min(10, len(browses))]]
+    platform = PLATFORM_CHOICES[data['platform']][0]
+    personality = Personalities.objects.filter(pid=pid, platform=platform).first()
+    personalities = personality.personality if personality and personality.personality else ''
+    return build_response(SUCCESS, {"personalities": personalities})
 
-    # 从浏览记录中筛选出用户点击过的内容
-    clicks = browses.filter(click=True)
-    # 提取点击记录的标题（最多10条）
-    click_titles = [click.title for click in clicks[:min(10, len(clicks))]]
-    
-    try:
-        print("query one personalities...")
-        # 尝试获取用户现有的偏好记录
-        now_personality = Personalities.objects.filter(pid=pid, platform=platform).first()
-        
-        # 检查现有偏好记录是否仍然有效（浏览和点击时间都在偏好更新之前）
-        if browses[0].browse_time <= now_personality.update_time and clicks[0].click_time <= now_personality.update_time:
-            # 如果偏好记录仍然有效，直接返回现有数据
-            return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
-        else:
-            # 如果偏好记录已过期，重新分析用户偏好
-            
-            # 基于浏览记录分析用户偏好
-            personalities = get_simple_personalities_from_browses(browses=browses_title).strip()
-            
-            # 尝试从点击偏好记录中获取点击偏好
-            try:
-                personality_click = PersonalitiesClick.objects.filter(pid=pid, platform=platform).first().personality_click
-                assert len(personality_click)>0
-            except:
-                # 如果没有点击偏好记录，基于点击记录重新分析
-                if len(click_titles)>0:
-                    personality_click = get_simple_personalities_from_clicks(clicks=click_titles).strip()
-                else:
-                    personality_click=""     
-            
-            # 根据是否有点击记录生成不同的响应内容
-            if len(click_titles)>0:       
-                first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而根据你的**点击内容**，我猜你的偏好是\n{personality_click}\n\n 请问有什么可以帮助你的吗？"
-            else:
-                first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而你都没有点击, 是不是不喜欢这些内容？"
 
-            # 更新用户偏好记录
-            now_personality.personality_click = personality_click
-            now_personality.personality = personalities
-            now_personality.first_response = first_response
-            now_personality.save()
-            
-            # 返回更新后的偏好信息
-            return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
-    except:
-        # 如果获取现有偏好记录失败（用户第一次使用），创建新的偏好记录
-        
-        # 基于浏览记录分析用户偏好
-        personalities = get_simple_personalities_from_browses(browses=browses_title).strip()
-        
-        # 尝试获取点击偏好记录
-        try:
-            personality_click = PersonalitiesClick.objects.filter(pid=pid, platform=platform).first().personality_click
-            assert len(personality_click)>0
-        except:
-            # 如果没有点击偏好记录，基于点击记录重新分析
-            if (len(click_titles)>0):
-                personality_click = get_simple_personalities_from_clicks(clicks=click_titles).strip()
-            else:
-                personality_click=""
-        
-        # 根据是否有点击记录生成不同的响应内容
-        if len(click_titles)>0:       
-            first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而根据你的**点击内容**，我猜你的偏好是\n{personality_click}\n\n 请问有什么可以帮助你的吗？"
-        else:
-            first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而你都没有点击, 是不是不喜欢这些内容？"
-        
-        # 创建新的用户偏好记录
-        now_personality = Personalities(pid=pid, platform=platform, personality=personalities, personality_click=personality_click, first_response=first_response)
-        now_personality.save()
-        
-        # 返回新创建的偏好信息
-        return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
+# [已废弃] RAH 偏好对齐，已由 guided_chat/start + unit_interpret 替代
+# def get_alignment(request):
+#     """
+#     获取用户偏好对齐信息
+#     基于（之前已保存的）用户的浏览和点击记录，分析用户偏好并生成个性化响应（回复）
+#     """
+#     data = json.loads(request.body)
+#     platform = PLATFORM_CHOICES[data['platform']][0]
+#     pid = data['pid']
+#     browses = Record.objects.filter(pid=pid, platform=platform, is_filter=True).order_by('-browse_time')
+#     if len(browses) == 0:
+#         return build_response(SUCCESS, {"personalities": [], "response": "你最近没有浏览记录"})
+#     browses_title = [browse.title for browse in browses[:min(10, len(browses))]]
+#     clicks = browses.filter(click=True)
+#     click_titles = [click.title for click in clicks[:min(10, len(clicks))]]
+#     try:
+#         now_personality = Personalities.objects.filter(pid=pid, platform=platform).first()
+#         if browses[0].browse_time <= now_personality.update_time and clicks[0].click_time <= now_personality.update_time:
+#             return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
+#         else:
+#             personalities = get_simple_personalities_from_browses(browses=browses_title).strip()
+#             try:
+#                 personality_click = PersonalitiesClick.objects.filter(pid=pid, platform=platform).first().personality_click
+#                 assert len(personality_click)>0
+#             except:
+#                 if len(click_titles)>0:
+#                     personality_click = get_simple_personalities_from_clicks(clicks=click_titles).strip()
+#                 else:
+#                     personality_click=""
+#             if len(click_titles)>0:
+#                 first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而根据你的**点击内容**，我猜你的偏好是\n{personality_click}\n\n 请问有什么可以帮助你的吗？"
+#             else:
+#                 first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而你都没有点击, 是不是不喜欢这些内容？"
+#             now_personality.personality_click = personality_click
+#             now_personality.personality = personalities
+#             now_personality.first_response = first_response
+#             now_personality.save()
+#             return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
+#     except:
+#         personalities = get_simple_personalities_from_browses(browses=browses_title).strip()
+#         try:
+#             personality_click = PersonalitiesClick.objects.filter(pid=pid, platform=platform).first().personality_click
+#             assert len(personality_click)>0
+#         except:
+#             if (len(click_titles)>0):
+#                 personality_click = get_simple_personalities_from_clicks(clicks=click_titles).strip()
+#             else:
+#                 personality_click=""
+#         if len(click_titles)>0:
+#             first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而根据你的**点击内容**，我猜你的偏好是\n{personality_click}\n\n 请问有什么可以帮助你的吗？"
+#         else:
+#             first_response = f"根据**平台推荐**，你可能喜欢\n{personalities}\n\n 而你都没有点击, 是不是不喜欢这些内容？"
+#         now_personality = Personalities(pid=pid, platform=platform, personality=personalities, personality_click=personality_click, first_response=first_response)
+#         now_personality.save()
+#         return build_response(SUCCESS, {"personalities": now_personality.personality, "response": now_personality.first_response})
 
 def get_feedback(request): #ok
     # 告诉用户近期基于规则{rule}过滤了如下内容：{content}，并询问“有什么问题吗”
@@ -745,6 +721,7 @@ def guided_chat_summarize(request):
     Returns:
         {actions: list} 格式与 /chatbot 一致，供前端弹窗确认
     """
+    t_start = time.time()
     data = json.loads(request.body)
     pid = data['pid']
     platform_idx = data['platform']
@@ -773,7 +750,8 @@ def guided_chat_summarize(request):
 
     if not actions:
         # 用户未表达偏好需求，直接用 get_fuzzy 返回的普通回复（已含规则上下文）
-        logger.info("[GuidedChat] summarize: 无操作，普通回复, pid=%s", pid)
+        elapsed = time.time() - t_start
+        logger.info("[GuidedChat] 总耗时 %.2fs | 无操作，普通回复 | pid=%s | 输入: %s", elapsed, pid, user_response[:60])
         return build_response(SUCCESS, {"actions": [], "sid": session.id, "content": response})
 
     # 创建 GenContentlog 日志记录（is_ac=False，等待用户确认）
@@ -804,7 +782,8 @@ def guided_chat_summarize(request):
             )
             action['log_id'] = gen.id
 
-    logger.info("[GuidedChat] summarize: 生成 %d 个操作, pid=%s, sid=%s", len(actions), pid, session.id)
+    elapsed = time.time() - t_start
+    logger.info("[GuidedChat] 总耗时 %.2fs | 生成 %d 个操作 | pid=%s | 输入: %s", elapsed, len(actions), pid, user_response[:60])
     return build_response(SUCCESS, {"actions": actions, "sid": session.id})
 
 # 被 Django 导入时就会执行：初始化 BackgroundScheduler、注册 job 并 scheduler.start()。通常在服务启动/第一次加载 views 时就会触发。
@@ -813,7 +792,6 @@ def guided_chat_summarize(request):
 from apscheduler.schedulers.background import BackgroundScheduler
 from django_apscheduler.jobstores import DjangoJobStore, register_events
 from apscheduler.triggers.interval import IntervalTrigger
-import time
 import datetime as dt
 from django_apscheduler.models import DjangoJobExecution
 from .rah import get_rah_personalities
