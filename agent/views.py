@@ -9,6 +9,12 @@ from agent.prompt.prompt_utils import interval
 from .const import SUCCESS, FAILURE, PLATFORM_CHOICES, PLATFORMS
 from .models import *
 import random
+# 重排时取前 N 条候选，可在此修改
+REORDER_TOP_N = 30
+# 实验模式参数: 取前 50 条候选，过滤+重排后只展示前 10 条
+EXPERIMENT_TOP_N = 50
+EXPERIMENT_SHOW_N = 10
+
 from .prompt.filter import filter_item
 from .prompt.fuzzy import get_fuzzy
 # [已废弃] RAH 偏好对齐，已由 guided_chat/start + unit_interpret 替代
@@ -47,6 +53,7 @@ def reorder(request):
         platform_idx = params.get('platform', 0)
         platform = PLATFORM_CHOICES[platform_idx][0]
         items = params.get('items', [])
+        experiment = params.get('experiment', False)
 
         # 批量写入浏览记录
         for item in items:
@@ -60,9 +67,87 @@ def reorder(request):
             )
 
         from online_TwoStage.pipeline import run_two_stage_reorder
-        order = run_two_stage_reorder(pid, platform, items)
+        order, removed_detail, positive_group = run_two_stage_reorder(pid, platform, items)
+
+        # 实验模式: 只展示前 EXPERIMENT_SHOW_N 条
+        if experiment:
+            order = order[:EXPERIMENT_SHOW_N]
+            logger.info("[reorder] 实验模式: 截取前 %d 条展示", EXPERIMENT_SHOW_N)
+
         return build_response(SUCCESS, {"order": order})
     return build_response(FAILURE, None)
+
+
+# 过滤阶段接口: 只做 LLM 过滤，返回过滤后的 items 和被移除列表
+def reorder_filter(request):
+    if request.method == 'POST':
+        params = json.loads(request.body)
+        pid = params.get('pid', '')
+        platform_idx = params.get('platform', 0)
+        platform = PLATFORM_CHOICES[platform_idx][0]
+        items = params.get('items', [])
+
+        # 批量写入浏览记录
+        for item in items:
+            Record.objects.create(
+                pid=pid, platform=platform,
+                title=item.get('title', ''), content='', url='', is_filter=True,
+            )
+
+        from online_TwoStage.pipeline import run_filtering_stage
+        filtered_items, removed_list = run_filtering_stage(pid, platform, items)
+        return build_response(SUCCESS, {
+            "filtered_items": filtered_items,
+            "removed_list": removed_list,
+            "filtered_count": len(filtered_items),
+            "removed_count": len(removed_list),
+        })
+    return build_response(FAILURE, None)
+
+
+# 重排阶段接口: 对过滤后的 items 做 LLM 重排，返回最终 order
+def reorder_rerank(request):
+    if request.method == 'POST':
+        params = json.loads(request.body)
+        pid = params.get('pid', '')
+        platform_idx = params.get('platform', 0)
+        platform = PLATFORM_CHOICES[platform_idx][0]
+        items = params.get('items', [])
+        removed_detail = params.get('removed_list', [])
+        experiment = params.get('experiment', False)
+
+        from online_TwoStage.pipeline import run_reranking_stage
+        order = run_reranking_stage(pid, platform, items, removed_detail)
+
+        # 实验模式: 只展示前 EXPERIMENT_SHOW_N 条
+        if experiment:
+            order = order[:EXPERIMENT_SHOW_N]
+            logger.info("[reorder_rerank] 实验模式: 截取前 %d 条展示", EXPERIMENT_SHOW_N)
+
+        # 写入重排日志
+        from agent.models import ReorderLog
+        rules = Rule.objects.filter(pid=pid, platform=platform, isactive=True)
+        positive_group = [r.rule for r in rules if r.rule.startswith("我想看")]
+        negative_group = [r.rule for r in rules if r.rule.startswith("我不想看")]
+        ReorderLog.objects.create(
+            pid=pid, platform=platform,
+            input_items=json.dumps([{"id": str(it.get("id", "")), "title": it.get("title", "")} for it in items], ensure_ascii=False),
+            output_order=json.dumps(order, ensure_ascii=False),
+            removed_items=json.dumps(removed_detail, ensure_ascii=False),
+            positive_rules=json.dumps(positive_group, ensure_ascii=False),
+            negative_rules=json.dumps(negative_group, ensure_ascii=False),
+        )
+
+        return build_response(SUCCESS, {"order": order})
+    return build_response(FAILURE, None)
+
+
+# 返回重排配置参数给前端
+def get_reorder_config(request):
+    experiment = request.GET.get('experiment', '') == '1'
+    if experiment:
+        return build_response(SUCCESS, {"top_n": EXPERIMENT_TOP_N, "show_n": EXPERIMENT_SHOW_N})
+    return build_response(SUCCESS, {"top_n": REORDER_TOP_N})
 
 
 def browse(request): #ok 需要改这个！

@@ -28,6 +28,41 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         });
         return true;
     }
+    if (request.type === 'reorder_filter') {
+        const jsonData = request.data;
+        fetch(`${backendUrl}/reorder_filter`, { method: 'POST', body: jsonData })
+        .then(response => response.json())
+        .then(data => { sendResponse(data); })
+        .catch((err) => {
+            console.warn("reorder_filter failed", err);
+            sendResponse({ error: true, message: String(err) });
+        });
+        return true;
+    }
+    if (request.type === 'reorder_rerank') {
+        const jsonData = request.data;
+        fetch(`${backendUrl}/reorder_rerank`, { method: 'POST', body: jsonData })
+        .then(response => response.json())
+        .then(data => { sendResponse(data); })
+        .catch((err) => {
+            console.warn("reorder_rerank failed", err);
+            sendResponse({ error: true, message: String(err) });
+        });
+        return true;
+    }
+    if (request.type === 'get_reorder_config') {
+        const experiment = request.experiment ? '1' : '0';
+        fetch(`${backendUrl}/get_reorder_config?experiment=${experiment}`)
+        .then(response => response.json())
+        .then(data => {
+            sendResponse(data);
+        })
+        .catch((err) => {
+            console.warn("get_reorder_config failed", err);
+            sendResponse({ error: true, message: String(err) });
+        });
+        return true;
+    }
     if (request.type === "build_request_click") {
         const jsonData = request.data;
         fetch(`${backendUrl}/click`, { method: 'POST', body: jsonData });

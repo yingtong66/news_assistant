@@ -179,15 +179,158 @@ async function processElement(element, platform=0) {
 }
 
 
-async function requestReorder(platform, items) { //向后端请求重排
+async function requestReorder(platform, items, experiment) { //向后端请求重排
   try {
-    const jsonData = JSON.stringify({ pid: userPid, platform: platform, items: items });
+    const jsonData = JSON.stringify({ pid: userPid, platform: platform, items: items, experiment: !!experiment });
     const data = await sendBackgroundRequest("build_request_reorder", jsonData);
     return data?.data?.order || [];
   } catch (err) {
     console.warn("reorder request failed", err);
     return [];
   }
+}
+
+// 从后端获取重排配置参数(top_n)，实验模式时传 experiment=true
+async function fetchReorderConfig(experiment) {
+  try {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: "get_reorder_config", experiment: !!experiment }, (resp) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        resolve(resp?.data?.top_n || 20);
+      });
+    });
+  } catch (err) {
+    console.warn("[MPB] fetchReorderConfig failed, fallback to 20", err);
+    return 20;
+  }
+}
+
+// 读取实验模式开关
+async function getExperimentMode() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get("experimentMode", (result) => {
+      resolve(!!result.experimentMode);
+    });
+  });
+}
+
+// 在页面上注入实验模式切换按钮
+function injectExperimentButton() {
+  if (document.getElementById("mpb-experiment-btn")) return;
+  const btn = document.createElement("button");
+  btn.id = "mpb-experiment-btn";
+  btn.style.cssText =
+    "position:fixed;top:10px;right:10px;z-index:99999;padding:6px 14px;" +
+    "border:2px solid #1890ff;border-radius:6px;font-size:13px;cursor:pointer;" +
+    "background:#fff;color:#1890ff;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.15);";
+  // 初始化按钮文字
+  chrome.storage.sync.get("experimentMode", (result) => {
+    const on = !!result.experimentMode;
+    btn.textContent = on ? "实验模式: ON" : "实验模式: OFF";
+    btn.style.background = on ? "#1890ff" : "#fff";
+    btn.style.color = on ? "#fff" : "#1890ff";
+  });
+  btn.addEventListener("click", () => {
+    chrome.storage.sync.get("experimentMode", (result) => {
+      const newVal = !result.experimentMode;
+      chrome.storage.sync.set({ experimentMode: newVal }, () => {
+        btn.textContent = newVal ? "实验模式: ON" : "实验模式: OFF";
+        btn.style.background = newVal ? "#1890ff" : "#fff";
+        btn.style.color = newVal ? "#fff" : "#1890ff";
+        console.log("[MPB] 实验模式切换为", newVal, "，刷新页面生效");
+      });
+    });
+  });
+  document.body.appendChild(btn);
+}
+
+// 注入实时状态徽章到页面左上角
+function injectStatusBadge() {
+  if (document.getElementById("mpb-status-badge")) return;
+  const badge = document.createElement("div");
+  badge.id = "mpb-status-badge";
+  badge.style.cssText =
+    "position:fixed;top:10px;left:10px;z-index:99999;padding:6px 14px;" +
+    "border-radius:6px;font-size:13px;font-weight:bold;" +
+    "background:#f0f0f0;color:#666;border:2px solid #d9d9d9;" +
+    "box-shadow:0 2px 8px rgba(0,0,0,0.15);transition:all 0.3s;";
+  badge.textContent = "等待抓取中";
+  document.body.appendChild(badge);
+  return badge;
+}
+
+// 更新状态徽章文字和颜色
+function updateStatusBadge(text, color) {
+  const badge = document.getElementById("mpb-status-badge");
+  if (!badge) return;
+  badge.textContent = text;
+  const colors = {
+    gray: { bg: "#f0f0f0", fg: "#666", border: "#d9d9d9" },
+    blue: { bg: "#e6f7ff", fg: "#1890ff", border: "#91d5ff" },
+    orange: { bg: "#fff7e6", fg: "#fa8c16", border: "#ffd591" },
+    green: { bg: "#f6ffed", fg: "#52c41a", border: "#b7eb8f" },
+  };
+  const c = colors[color] || colors.gray;
+  badge.style.background = c.bg;
+  badge.style.color = c.fg;
+  badge.style.borderColor = c.border;
+}
+
+// 实验模式 AB 切换: 在原始前10和重排后10之间切换展示
+function injectABToggle(container, insertPos, originalNodes, rerankedNodes) {
+  if (document.getElementById("mpb-ab-toggle")) return;
+
+  // 当前展示状态: "reranked" 或 "original"
+  let currentView = "reranked";
+
+  const btn = document.createElement("button");
+  btn.id = "mpb-ab-toggle";
+  btn.style.cssText =
+    "position:fixed;top:46px;right:10px;z-index:99999;padding:6px 14px;" +
+    "border:2px solid #722ed1;border-radius:6px;font-size:13px;cursor:pointer;" +
+    "background:#f9f0ff;color:#722ed1;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.15);";
+  btn.textContent = "当前: 重排后 (点击切换)";
+
+  // 执行切换: 移除当前展示的节点，插入另一组
+  const doSwitch = (toView) => {
+    const showNodes = toView === "original" ? originalNodes : rerankedNodes;
+    const hideNodes = toView === "original" ? rerankedNodes : originalNodes;
+
+    // 隐藏当前组
+    hideNodes.forEach(n => {
+      if (n.parentNode) n.parentNode.removeChild(n);
+    });
+
+    // 插入目标组
+    let idx = insertPos;
+    showNodes.forEach(n => {
+      const ref = container.children[idx] || null;
+      container.insertBefore(n, ref);
+      idx++;
+    });
+
+    currentView = toView;
+    if (toView === "original") {
+      btn.textContent = "当前: 原始前10 (点击切换)";
+      btn.style.background = "#fff7e6";
+      btn.style.color = "#fa8c16";
+      btn.style.borderColor = "#fa8c16";
+    } else {
+      btn.textContent = "当前: 重排后 (点击切换)";
+      btn.style.background = "#f9f0ff";
+      btn.style.color = "#722ed1";
+      btn.style.borderColor = "#722ed1";
+    }
+  };
+
+  btn.addEventListener("click", () => {
+    doSwitch(currentView === "reranked" ? "original" : "reranked");
+  });
+
+  document.body.appendChild(btn);
 }
 
 function simulateSilentScrollToBottom() { //静默滚动到页面底部
@@ -209,8 +352,8 @@ function simulateSilentScrollToBottom() { //静默滚动到页面底部
   }, 300);
 }
 
-async function reorderNewNodes(options, nodes) { //把新插入的卡片发给后端获取随机顺序，然后只重排这批新卡片并插回页面。
-  const { container, platform, getTitleForItem } = options;
+async function reorderNewNodes(options, nodes) { //两阶段重排: 过滤 -> 重排, 实时更新状态徽章
+  const { container, platform, getTitleForItem, getMetaForItem, experiment } = options;
   // 容器不存在时直接返回空列表
   if (!container) return [];
 
@@ -221,21 +364,68 @@ async function reorderNewNodes(options, nodes) { //把新插入的卡片发给�
   // 过滤出仍然存在于容器中的节点，避免对已被移除的卡片重排
   const liveNodes = nodes.filter((node) => container.contains(node));
 
-  // 构造发送给后端的 items 列表（id 用索引表示，title 用于后端计算）
-  const items = liveNodes.map((node, index) => ({
-    id: String(index + 1),
-    title: getTitleForItem(node) || "",
-  }));
+  // 构造发送给后端的 items 列表（id 用索引表示，title/source/time 用于后端计算）
+  const items = liveNodes.map((node, index) => {
+    const meta = getMetaForItem ? getMetaForItem(node) : {};
+    return {
+      id: String(index + 1),
+      title: getTitleForItem(node) || "",
+      source: meta.source || "",
+      time: meta.time || "",
+    };
+  });
 
-  // 请求后端返回新的顺序（被过滤的条目不在 order 中）
-  const order = await requestReorder(platform, items);
-  if (!order || order.length === 0) return liveNodes;
+  // 阶段1: 过滤
+  updateStatusBadge("正在过滤 " + items.length + " 条...", "orange");
+  let filteredItems = items;
+  let removedList = [];
+  try {
+    const filterData = await sendBackgroundRequest("reorder_filter", JSON.stringify({
+      pid: userPid, platform: platform, items: items,
+    }));
+    if (filterData?.data) {
+      filteredItems = filterData.data.filtered_items || items;
+      removedList = filterData.data.removed_list || [];
+    }
+  } catch (err) {
+    console.warn("[MPB] reorder_filter failed, skip filtering", err);
+  }
+  updateStatusBadge("已过滤, 移除 " + removedList.length + " 条", "blue");
+
+  // 阶段2: 重排
+  updateStatusBadge("正在重排 " + filteredItems.length + " 条...", "orange");
+  let order = [];
+  try {
+    const rerankData = await sendBackgroundRequest("reorder_rerank", JSON.stringify({
+      pid: userPid, platform: platform, items: filteredItems,
+      removed_list: removedList, experiment: !!experiment,
+    }));
+    order = rerankData?.data?.order || [];
+  } catch (err) {
+    console.warn("[MPB] reorder_rerank failed", err);
+  }
+
+  if (!order || order.length === 0) {
+    updateStatusBadge("重排失败, 保持原序", "gray");
+    return liveNodes;
+  }
+
+  updateStatusBadge("重排完成, 展示 " + order.length + " 条", "green");
 
   // 建立 id 到节点的映射，方便按新顺序取回节点
   const idToNode = {};
   liveNodes.forEach((node, index) => {
     idToNode[String(index + 1)] = node;
   });
+
+  // 实验模式: 保存原始前10节点的克隆，用于 AB 切换
+  const SHOW_N = experiment ? 10 : 0;
+  let originalTopNodes = [];
+  if (experiment && SHOW_N > 0) {
+    originalTopNodes = liveNodes.slice(0, SHOW_N).map(n => n.cloneNode(true));
+    // 给克隆节点加标记，避免被 observer 重复处理
+    originalTopNodes.forEach(n => { n.dataset.mpbOriginalClone = "1"; });
+  }
 
   // 区分保留和被过滤的节点
   const orderSet = new Set(order.map(String));
@@ -269,6 +459,12 @@ async function reorderNewNodes(options, nodes) { //把新插入的卡片发给�
   });
 
   const keptNodes = order.map(id => idToNode[String(id)]).filter(Boolean);
+
+  // 实验模式: 注入 AB 切换按钮
+  if (experiment && keptNodes.length > 0 && originalTopNodes.length > 0) {
+    const rerankedNodes = keptNodes.slice(); // 重排后展示的节点
+    injectABToggle(container, firstPos, originalTopNodes, rerankedNodes);
+  }
   return keptNodes;
 }
 
@@ -324,30 +520,34 @@ async function setupFeedObserver(options) {
     containerSelector, // 内容容器选择器
     platform,
     getTitleForItem,
+    getMetaForItem,
     reorderKey,
   } = options;
-  
+
   // 检查当前页面是否为目标页面
   if (this.window.location.href !== url) return;
-
-  // 处理页面初始加载的内容项
 
   // 获取目标容器元素
   const targetNode = document.querySelector(containerSelector);
   if (!targetNode) return;
 
-  // 对容器中的现有内容进行重新排序
+  // 注入实验模式按钮和状态徽章
+  injectExperimentButton();
+  injectStatusBadge();
 
-  // 初始化待处理状态对象
-  const reorderState = {
-    nextBatchStart: 0, // 下一组的起始 originalOrder
-    running: false,
-    timer: null,
-    loadMoreTimer: null,
-  };
+  // 读取实验模式状态
+  const experiment = await getExperimentMode();
+  // 从后端拿重排条数配置(实验模式时 top_n=50)
+  const TOP_N = await fetchReorderConfig(experiment);
+  const MAX_SCROLL_TIMES = 6;
+  console.log("[MPB] 重排配置: TOP_N=" + TOP_N + ", experiment=" + experiment + ", MAX_SCROLL=" + MAX_SCROLL_TIMES);
+
+  updateStatusBadge("等待抓取中", "gray");
 
   let originalIndex = 0;
+  let reorderDone = false; // 只重排一次
 
+  // 标记已有元素
   const initialElements = document.querySelectorAll(initialSelector);
   initialElements.forEach((value) => {
     markOriginalOrder(value, originalIndex);
@@ -355,50 +555,76 @@ async function setupFeedObserver(options) {
     originalIndex += 1;
   });
 
-  // 仅在第一组不足20条时由 tryReorderCurrentBatch 内部滚动，不再单独 checkAndLoad
+  // 头条平台：初始加载时立即清理非图文元素
+  if (platform === 0) cleanToutiaoNonArticles();
 
-  // 尝试对当前组进行重排（仅当该组卡片已凑满20条或已是最后一批时）
-  const tryReorderCurrentBatch = () => {
-    if (reorderState.timer || reorderState.running) return;
-    reorderState.timer = setTimeout(async () => {
-      reorderState.timer = null;
-      if (reorderState.running) return;
-      reorderState.running = true;
+  updateStatusBadge("已抓取 " + originalIndex + "/" + TOP_N + " 条", "blue");
 
-      const batchStart = reorderState.nextBatchStart;
-      const batchEnd = batchStart + 20;
+  // 检查当前条目数是否够 TOP_N，够则触发重排
+  const checkAndReorder = async () => {
+    if (reorderDone) return;
+    const allNodes = Array.from(targetNode.querySelectorAll(initialSelector));
+    if (allNodes.length >= TOP_N) {
+      reorderDone = true;
+      const batch = allNodes.slice(0, TOP_N);
+      updateStatusBadge("已抓取 " + batch.length + " 条, 开始处理", "blue");
+      await reorderNewNodes({
+        container: targetNode,
+        platform: platform,
+        getTitleForItem: getTitleForItem,
+        getMetaForItem: getMetaForItem,
+        experiment: experiment,
+      }, batch);
+      if (platform === 0) cleanToutiaoNonArticles();
+    }
+  };
 
-      // 第一组: 不再主动滚动，等用户手动滚动加载
-      // if (batchStart === 0) { ... }
-
-      // 收集当前组卡片
-      const allNodes = Array.from(targetNode.querySelectorAll(initialSelector));
-      const batch = allNodes.filter((node) => {
-        const order = Number(node.dataset.originalOrder);
-        return Number.isFinite(order) && order >= batchStart && order < batchEnd;
+  // 自动滚动收集条目
+  const autoScrollAndCollect = async () => {
+    for (let i = 0; i < MAX_SCROLL_TIMES; i++) {
+      const currentCount = targetNode.querySelectorAll(initialSelector).length;
+      if (currentCount >= TOP_N) {
+        console.log("[MPB] 滚动前已有 " + currentCount + " 条, 无需继续滚动");
+        break;
+      }
+      updateStatusBadge("抓取中 " + currentCount + "/" + TOP_N + " (第" + (i+1) + "次滚动)", "blue");
+      console.log("[MPB] 第 " + (i + 1) + " 次自动滚动, 当前 " + currentCount + " 条");
+      simulateSilentScrollToBottom();
+      // 等待新条目加载
+      await new Promise(resolve => setTimeout(resolve, 800));
+      // 标记新出现的元素
+      const newElements = targetNode.querySelectorAll(initialSelector);
+      newElements.forEach((el) => {
+        if (!el.dataset.originalOrder) {
+          markOriginalOrder(el, originalIndex);
+          processElement(el, platform);
+          originalIndex += 1;
+        }
       });
-
-      if (batch.length >= 20) {
+      if (platform === 0) cleanToutiaoNonArticles();
+    }
+    // 滚动结束后检查并重排
+    await checkAndReorder();
+    // 如果滚动完仍不够 TOP_N，用已有的条目重排
+    if (!reorderDone) {
+      reorderDone = true;
+      const allNodes = Array.from(targetNode.querySelectorAll(initialSelector));
+      if (allNodes.length > 0) {
+        updateStatusBadge("已抓取 " + allNodes.length + " 条(不足" + TOP_N + "), 开始处理", "blue");
+        console.log("[MPB] 滚动 " + MAX_SCROLL_TIMES + " 次后仅 " + allNodes.length + " 条, 用已有条目重排");
         await reorderNewNodes({
           container: targetNode,
           platform: platform,
           getTitleForItem: getTitleForItem,
-        }, batch);
-        reorderState.nextBatchStart += 20;
-        console.log("[MPB] 第", Math.floor(batchStart / 20) + 1, "组重排完成, 20条");
-        // 头条平台：重排后清理非图文元素
+          getMetaForItem: getMetaForItem,
+          experiment: experiment,
+        }, allNodes);
         if (platform === 0) cleanToutiaoNonArticles();
       }
-
-      reorderState.running = false;
-    }, 300);
+    }
   };
 
-  tryReorderCurrentBatch();
-
-  // 头条平台：初始加载时立即清理非图文元素
-  if (platform === 0) cleanToutiaoNonArticles();
-
+  // MutationObserver 只负责标记新节点，不再触发重排
   const observer = new MutationObserver(function (mutations) {
     mutations.forEach(function (mutation) {
       mutation.addedNodes.forEach(function (addedNode) {
@@ -416,22 +642,13 @@ async function setupFeedObserver(options) {
         }
       });
     });
-
-    // 检查当前组是否凑满20条，凑满则触发重排
-    const allNodes = Array.from(targetNode.querySelectorAll(initialSelector));
-    const batchStart = reorderState.nextBatchStart;
-    const batchEnd = batchStart + 20;
-    const batchCount = allNodes.filter((node) => {
-      const order = Number(node.dataset.originalOrder);
-      return Number.isFinite(order) && order >= batchStart && order < batchEnd;
-    }).length;
-    if (batchCount >= 20) {
-      tryReorderCurrentBatch();
-    }
   });
 
   const config = { childList: true, subtree: false };
-  observer.observe(targetNode, config); // 开始观察目标容器
+  observer.observe(targetNode, config);
+
+  // 启动自动滚动收集
+  await autoScrollAndCollect();
 }
 
 
@@ -450,6 +667,16 @@ function getToutiaoTitleFromCard(node) {
     node.querySelector("a[aria-label]") ||
     node.querySelector("a");
   return a ? (a.getAttribute("aria-label") || a.innerText.trim()) : "";
+}
+
+// 从头条卡片中提取来源账号和发布时间
+function getToutiaoMetaFromCard(node) {
+  const authorEl = node.querySelector(".feed-card-footer-cmp-author a");
+  const timeEl = node.querySelector(".feed-card-footer-time-cmp");
+  return {
+    source: authorEl ? authorEl.innerText.trim() : "",
+    time: timeEl ? timeEl.innerText.trim() : "",
+  };
 }
 
 function markOriginalOrder(node, orderIndex) {
@@ -490,6 +717,7 @@ window.addEventListener('load', function () {
       containerSelector: ".ttp-feed-module > div:not(.main-nav-wrapper)",
       platform: 0,
       getTitleForItem: getToutiaoTitleFromCard,
+      getMetaForItem: getToutiaoMetaFromCard,
       reorderKey: "toutiao",
     },
   ];

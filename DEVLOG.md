@@ -1,5 +1,83 @@
 # DEVLOG
 
+## 2026-04-12 实验模式 AB 切换按钮
+
+- 实验模式下重排完成后，页面左上角(状态徽章下方)注入紫色切换按钮
+- 点击可在"原始前10"和"重排后10"之间切换展示，方便用户对比评价
+- "原始前10": 平台推荐的原始顺序前10条(重排前的 liveNodes 前10个的克隆)
+- "重排后10": 经过 LLM 过滤+重排后由后端返回的前10条
+- 切换时动态移除/插入 DOM 节点，按钮颜色区分状态(紫=重排后, 橙=原始)
+- 仅实验模式(experiment=true)下出现，普通模式无此按钮
+
+## 2026-04-12 新增实时状态徽章 + 拆分过滤/重排为两阶段接口
+
+### 背景
+从集齐候选到返回重排结果耗时长(LLM 过滤+重排各一次调用), 用户无法感知当前进度。
+
+### 变更
+- 页面左上角注入状态徽章，实时显示: "等待抓取中" -> "抓取中 X/N (第Y次滚动)" -> "已抓取 X 条" -> "正在过滤 X 条" -> "已过滤, 移除 X 条" -> "正在重排 X 条" -> "重排完成, 展示 X 条"
+- 不同阶段用不同底色: 灰(等待)、蓝(抓取/信息)、橙(LLM处理中)、绿(完成)
+- 拆分 `/reorder` 为 `/reorder_filter` + `/reorder_rerank` 两个独立接口，前端在两阶段之间更新状态
+- `pipeline.py`: 新增 `run_filtering_stage()` 和 `run_reranking_stage()` 独立函数
+- `views.py`: 新增 `reorder_filter()` 和 `reorder_rerank()` 视图; ReorderLog 写入移到 reorder_rerank
+- `background/zhihu.js`: 新增 `reorder_filter` / `reorder_rerank` 消息转发
+- `zhihu.js`: `reorderNewNodes` 改为两阶段调用 + 状态更新; `setupFeedObserver` 在滚动过程中更新抓取进度
+- 原 `/reorder` 接口保留兼容
+
+## 2026-04-11 新增实验模式
+
+### 变更
+- 页面右上角注入"实验模式: ON/OFF"按钮，状态存 `chrome.storage.sync`，切换后刷新页面生效
+- 实验模式 ON: 后端 `EXPERIMENT_TOP_N=50` 条候选送 LLM 过滤+重排，结果只展示前 `EXPERIMENT_SHOW_N=10` 条
+- 实验模式 OFF: 正常模式，取前 `REORDER_TOP_N=30` 条，全部展示
+- 前端 `requestReorder` / `fetchReorderConfig` 传递 `experiment` 参数
+- 后端 `get_reorder_config` 根据 experiment 返回不同 top_n; `reorder` 实验模式时截取 order 前 10 条
+- `background/zhihu.js` 转发 config 请求时带 experiment 参数
+
+## 2026-04-11 新增 ReorderLog 模型记录每次重排的完整快照
+
+### 背景
+之前重排的输入/输出/过滤原因只打 logger，admin 后台无法查看。
+
+### 变更
+- `agent/models.py`: 新增 `ReorderLog` 模型，字段：pid、platform、input_items(JSON)、output_order(JSON)、removed_items(JSON, 含 reason)、positive_rules、negative_rules、timestamp
+- `agent/admin.py`: 注册 `ReorderLogAdmin`，列表显示 pid/platform/timestamp，详情页只读
+- `online_TwoStage/pipeline.py`: `run_two_stage_reorder` 末尾写入 `ReorderLog`，removed_detail 直接取 LLM 过滤返回的 removed_list（已含 reason 字段）
+- migration: `agent/migrations/0024_reorderlog.py`
+
+## 2026-04-11 重排触发逻辑重写: 去掉分批, 改为一次性重排前N条
+
+### 变更
+- 去掉原有的分批(每20条一组)重排机制, 改为只对前 N 条进行一次过滤+重排, 后续滚动不再触发重排
+- N 由后端 `REORDER_TOP_N` 参数控制(默认20), 前端通过 `/get_reorder_config` 接口获取
+- 页面刷新后自动滚动收集条目: 每次滚动后等 800ms 让新卡片加载, 检查条目数是否 >= N, 够了就停止; 最多滚动 6 次(N 最大约50)
+- 滚动 6 次后仍不够 N 条, 用已有条目执行重排
+
+### 改动文件
+- `agent/views.py`: 新增 `REORDER_TOP_N = 20` 参数和 `get_reorder_config()` 接口
+- `agent/urls.py`: 注册 `/get_reorder_config`
+- `my-profile-buddy-frontend/public/contents/zhihu.js`:
+  - 新增 `fetchReorderConfig()` 通过 background 获取 top_n
+  - 重写 `setupFeedObserver`: 去掉 `reorderState`/`tryReorderCurrentBatch`/分批逻辑, 改为 `autoScrollAndCollect` 自动滚动 + 一次性 `checkAndReorder`
+  - MutationObserver 只负责标记新节点的 originalOrder, 不再触发重排
+- `my-profile-buddy-frontend/public/background/zhihu.js`: 新增 `get_reorder_config` 消息转发
+
+## 2026-04-11 过滤/重排条目增加来源账号和发布时间
+
+- 之前 LLM 过滤和重排只能看到每条内容的标题,信息不够充分
+- 从头条卡片 DOM 中额外提取来源账号(`.feed-card-footer-cmp-author a`)和发布时间(`.feed-card-footer-time-cmp`)
+- `zhihu.js`: 新增 `getToutiaoMetaFromCard()` 提取 source/time,头条 feedConfig 加 `getMetaForItem`,`setupFeedObserver` 解构并透传 `getMetaForItem`,items 构造从 `{id, title}` 扩展为 `{id, title, source, time}`
+- `pipeline.py`:
+  - `format_items_text` 输出从 `id:1, 标题:xxx` 变为 `id:1, 标题:xxx, 来源:行动新闻, 时间:9小时前`(有值才拼接)
+  - 过滤后用 `id_to_item` 映射还原原始完整条目(含 source/time),避免 LLM 返回的精简 JSON 丢失字段
+  - 日志每条输出加 `source=` 和 `time=`;`parse_json_from_response` 增加 None 防护
+  - 新增重排生效检测: 对比重排结果与原序,输出 WARNING"重排未生效"或 INFO"重排生效,共 X 个位置变化"
+  - 过滤无移除时输出 WARNING"过滤未生效"
+- `prompts.py`:
+  - 过滤 prompt: 说明候选包含来源和时间可辅助判断
+  - 重排 prompt 重写: 来源匹配从"辅助信号"升级为独立规则,列举常见官方媒体账号名称和识别模式(新闻/日报/晚报/卫视);新增时间信号规则(偏好含"最新"时近期内容优先);体育匹配举例更具体(全红婵、陈芋汐等)
+- 知乎/B站未配 `getMetaForItem`,回退为空字符串,不影响现有功能
+
 ## 2026-04-08 重排 prompt 两轮调优
 
 ### 问题

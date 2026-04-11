@@ -149,6 +149,24 @@ class PersonalitiesClick(models.Model):
         return f"{self.personality_click}"
 
 
+class ReorderLog(models.Model):
+    pid = models.CharField(max_length=10, verbose_name='参与者')
+    platform = models.CharField(max_length=10, choices=PLATFORM_CHOICES, verbose_name='平台')
+    input_items = models.TextField(verbose_name='输入列表')
+    output_order = models.TextField(verbose_name='输出顺序')
+    removed_items = models.TextField(default='[]', verbose_name='移除列表')
+    positive_rules = models.TextField(default='', verbose_name='正向规则')
+    negative_rules = models.TextField(default='', verbose_name='负向规则')
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name='时间')
+
+    class Meta:
+        verbose_name = '重排日志'
+        verbose_name_plural = '重排日志'
+
+    def __str__(self):
+        return f"{self.pid} - {self.platform} - {self.timestamp}"
+
+
 class UserPid(models.Model):
     pid = models.CharField(max_length=10, default="P00", verbose_name='参与者')
     def __str__(self) -> str:
