@@ -1,5 +1,50 @@
 # DEVLOG
 
+## 2026-04-12 前端细节修复
+
+- 过滤解析失败兜底: `run_filtering` 解析失败时返回 id 列表而非原始 dict，修复 `unhashable type: 'dict'` 错误
+- 等待页面渲染: 自动滚动前先轮询等待至少 1 个图文元素出现（最多 10 秒），解决刷新后抓取 0 条的问题
+- 头条清理: `cleanToutiaoNonArticles` 新增删除右下角浮动工具栏（`.ttp-toolbar`）
+- "原序:n"标识仅在非实验模式下显示，`markOriginalOrder` 新增 `experiment` 参数控制
+
+## 2026-04-12 历史偏好折叠时重载聊天引导语
+
+- 折叠历史偏好时，聊天框重新加载冷启动引导语（无偏好模式）；展开时重新加载正常引导语（含偏好）
+- 前端 `Dashboard.jsx`: `HistoryPreference` 新增 `onCollapseChange` 回调，折叠/展开时调 `/guided_chat/start`（折叠时带 `no_preference=1`）
+- 后端 `views.py`: `guided_chat_start` 新增 `no_preference` 参数，为 1 时跳过偏好查询直接返回冷启动模板
+
+## 2026-04-12 前端滚动收集与实验模式优化
+
+- 自动滚动收集: 去掉固定次数循环，改为持续滚动直到图文条目数 >= TOP_N。三个停止条件: 收集够 TOP_N / 连续5轮无新增 / 滚动达10次上限。等待时间从 800ms 增至 1200ms
+- 实验模式 AB 按钮: "当前: 原始前10" / "当前: 重排后" 改为 "版本A" / "版本B"
+- 移除卡片上的"原序:n"标识（`markOriginalOrder` 不再注入 badge）
+
+## 2026-04-12 实验模式: 后端保存完整重排顺序 + 前端隐藏多余节点
+
+- 后端 `reorder_rerank`: ReorderLog 写入移到实验模式截断之前，数据库保存完整重排顺序，截断只影响返回给前端的 order
+- 前端 `zhihu.js`: 实验模式下隐藏 TOP_N 之后的多余节点（`display:none`），确保页面只展示重排返回的10条
+  - `checkAndReorder` 触发重排时，`allNodes.slice(TOP_N)` 的节点全部隐藏
+  - MutationObserver 中，重排完成后新加载的节点也直接隐藏，防止滚动加载新内容
+
+## 2026-04-12 LLM 输出精简: 只返回 id，不返回 title
+
+### 背景
+重排和过滤阶段 LLM 输出包含每条候选的 id + title，候选数多时 title 占大量 output tokens，导致响应慢。
+
+### 变更
+- `prompts.py`: 过滤输出格式从 `[{id, title}]` 改为纯 id 列表 `["1", "3", ...]`；removed_list 从 `{id, title, reason}` 改为 `{id, reason}`；重排输出从 `[{id, title}]` 改为 `["1", "3", ...]`。示例用具体数字避免 LLM 照抄占位符。
+- `pipeline.py`:
+  - 新增 `clean_id()` 清洗 LLM 返回的 id 前缀（如 `"id:1"` -> `"1"`），过滤和重排解析均使用
+  - `run_filtering()` 返回值从 `(filtered_items, removed_list)` 改为 `(filtered_ids: list[str], removed_list)`
+  - 调用方 `run_filtering_stage` / `run_two_stage_reorder` 通过 `id_to_item` 映射还原完整 item（含 title/source/time）再传给重排阶段
+  - 新增 `format_item_info()` 辅助函数，格式化单条 item 展示信息
+  - 过滤阶段打印移除列表（含 id/title/source/time/reason），重排阶段打印重排列表，均为结构化多行格式
+- ReorderLog 日志优化:
+  - 输入列表从 `{id, title}` 扩展为 `{id, title, source, time}`，信息更完整
+  - 前端 `reorder_rerank` 新增传 `original_items`（过滤前完整列表），后端用它写日志，修复输入列表缺少被过滤条目的问题
+  - `output_order` verbose_name 改为"重排顺序"
+  - Admin readonly_fields 顺序调整: 移除列表排在重排顺序前面
+
 ## 2026-04-12 实验模式 AB 切换按钮
 
 - 实验模式下重排完成后，页面左上角(状态徽章下方)注入紫色切换按钮

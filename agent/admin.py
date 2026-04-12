@@ -77,6 +77,6 @@ class ReorderLogAdmin(admin.ModelAdmin):
     list_display = ('pid', 'platform', 'timestamp')
     list_filter = ['pid', 'platform']
     search_fields = ['pid']
-    readonly_fields = ('pid', 'platform', 'input_items', 'output_order', 'removed_items', 'positive_rules', 'negative_rules', 'timestamp')
+    readonly_fields = ('pid', 'platform', 'input_items', 'removed_items', 'output_order', 'positive_rules', 'negative_rules', 'timestamp')
 
 admin.site.register(ReorderLog, ReorderLogAdmin)

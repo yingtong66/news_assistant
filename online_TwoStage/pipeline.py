@@ -9,6 +9,14 @@ from agent.prompt.prompt_utils import get_bailian_response
 from online_TwoStage.prompts import FILTERING_PROMPT, RERANKING_PROMPT
 
 
+# 清洗 LLM 返回的 id，去掉 "id:" 等前缀，只保留纯数字/字符串 id
+def clean_id(raw):
+    s = str(raw).strip()
+    if s.lower().startswith("id:"):
+        s = s[3:].strip()
+    return s
+
+
 # 从 LLM 返回文本中提取 JSON 对象
 def parse_json_from_response(text):
     if not text:
@@ -55,6 +63,7 @@ def run_filtering(items, negative_group):
     prompt = FILTERING_PROMPT.format(negative_group=rules_text, items=items_text)
     msg = [{"role": "user", "content": prompt}]
     logger.info("[TwoStage-过滤] 输入 %d 个候选, 规则: %s", len(items), negative_group)
+    # logger.info("[TwoStage-过滤] LLM输入prompt:\n%s", prompt)
 
     response_text = get_bailian_response(msg)
     # logger.info("[TwoStage-过滤] LLM原始响应:\n%s", response_text)
@@ -62,25 +71,24 @@ def run_filtering(items, negative_group):
     result = parse_json_from_response(response_text)
     if result is None:
         logger.warning("[TwoStage-过滤] 响应解析失败，回退全量保留 %d 条。", len(items))
-        return items, []
+        return [str(item.get('id', '')) for item in items], []
 
     filtered_list = result.get('filtered_list', [])
     removed_list = result.get('removed_list', [])
 
-    # LLM 可能把同一条目同时放进 filtered_list 和 removed_list，用 removed_ids 剔除
-    removed_ids_set = set(str(item.get('id', '')) for item in removed_list)
-    filtered_list = [item for item in filtered_list if str(item.get('id', '')) not in removed_ids_set]
+    # filtered_list 现在是纯 id 列表，统一转 str 并清洗前缀
+    filtered_ids = [clean_id(x) for x in filtered_list]
+    # removed_list 是 [{id, reason}, ...]，清洗 id 前缀
+    for item in removed_list:
+        item['id'] = clean_id(item.get('id', ''))
+    removed_ids_set = set(item['id'] for item in removed_list)
+    filtered_ids = [rid for rid in filtered_ids if rid not in removed_ids_set]
 
-    logger.info("[TwoStage-过滤] 结果: 保留 %d 条, 移除 %d 条", len(filtered_list), len(removed_list))
+    logger.info("[TwoStage-过滤] 结果: 保留 %d 条, 移除 %d 条", len(filtered_ids), len(removed_list))
     if not removed_list:
         logger.warning("[TwoStage-过滤] 过滤未生效，无条目被移除")
 
-    # [已禁用] 保底: 过滤后数量 < 70% 则回退全量
-    # if len(filtered_list) < len(items) * 0.7:
-    #     logger.warning("[TwoStage-过滤] 过滤过多 (%d/%d < 70%%)，回退全量", len(filtered_list), len(items))
-    #     return items, []
-
-    return filtered_list, removed_list
+    return filtered_ids, removed_list
 
 
 # 调用 LLM 执行重排，返回排序后的 id 列表
@@ -94,6 +102,7 @@ def run_reranking(items, positive_group):
     prompt = RERANKING_PROMPT.format(positive_group=pos_text, items=items_text)
     msg = [{"role": "user", "content": prompt}]
     logger.info("[TwoStage-重排] 输入 %d 个候选, 偏好: %s", len(items), positive_group if positive_group else "(无)")
+    # logger.info("[TwoStage-重排] LLM输入prompt:\n%s", prompt)
 
     response_text = get_bailian_response(msg)
     # logger.info("[TwoStage-重排] LLM原始响应:\n%s", response_text)
@@ -105,7 +114,8 @@ def run_reranking(items, positive_group):
 
     rerank_list = result.get('rerank_list', [])
     logger.info("[TwoStage-重排] 结果: 输出 %d 条 (期望 %d 条)", len(rerank_list), len(items))
-    return [str(item.get('id', '')) for item in rerank_list]
+    # rerank_list 现在是纯 id 列表，清洗前缀
+    return [clean_id(x) for x in rerank_list]
 
 
 # 两阶段重排主流程: 过滤 + 重排
@@ -127,11 +137,10 @@ def run_two_stage_reorder(pid, platform, items):
     removed_ids = set()
     removed_detail = []  # [{id, title, reason}, ...]
     if negative_group:
-        filtered_items, removed_list = run_filtering(items, negative_group)
+        filtered_ids, removed_list = run_filtering(items, negative_group)
         removed_ids = set(str(item.get('id', '')) for item in removed_list)
         removed_detail = removed_list  # LLM 返回的已含 reason
         # 用原始 items 还原完整字段，保留过滤后的顺序
-        filtered_ids = [str(item.get('id', '')) for item in filtered_items]
         items_for_rerank = [id_to_item[rid] for rid in filtered_ids if rid in id_to_item]
     else:
         items_for_rerank = items
@@ -195,7 +204,12 @@ def run_two_stage_reorder(pid, platform, items):
     ReorderLog.objects.create(
         pid=pid,
         platform=platform,
-        input_items=json.dumps([{"id": str(it.get("id", "")), "title": it.get("title", "")} for it in items], ensure_ascii=False),
+        input_items=json.dumps([{
+            "id": str(it.get("id", "")),
+            "title": it.get("title", ""),
+            "source": it.get("source", ""),
+            "time": it.get("time", ""),
+        } for it in items], ensure_ascii=False),
         output_order=json.dumps(final_order, ensure_ascii=False),
         removed_items=json.dumps(removed_detail, ensure_ascii=False),
         positive_rules=json.dumps(positive_group, ensure_ascii=False),
@@ -203,6 +217,16 @@ def run_two_stage_reorder(pid, platform, items):
     )
 
     return final_order, removed_detail, positive_group
+
+
+# 格式化单条 item 的展示信息
+def format_item_info(item):
+    parts = ["id={}, title={}".format(item.get('id', ''), item.get('title', ''))]
+    if item.get('source'):
+        parts.append("source={}".format(item['source']))
+    if item.get('time'):
+        parts.append("time={}".format(item['time']))
+    return ", ".join(parts)
 
 
 # 仅执行过滤阶段，返回过滤后 items 和被移除列表
@@ -215,10 +239,15 @@ def run_filtering_stage(pid, platform, items):
         logger.info("[TwoStage-过滤阶段] 无负向规则, 跳过过滤")
         return items, []
     id_to_item = {str(item.get('id', '')): item for item in items}
-    filtered_items, removed_list = run_filtering(items, negative_group)
-    removed_ids_set = set(str(item.get('id', '')) for item in removed_list)
-    filtered_ids = [str(item.get('id', '')) for item in filtered_items]
+    filtered_ids, removed_list = run_filtering(items, negative_group)
     result_items = [id_to_item[rid] for rid in filtered_ids if rid in id_to_item]
+
+    # 打印解析后的过滤结果
+    removed_lines = "\n".join("    {}: {} | reason: {}".format(
+        i, format_item_info(id_to_item.get(str(rm.get('id', '')), {})), rm.get('reason', '')
+    ) for i, rm in enumerate(removed_list, 1))
+    logger.info("[TwoStage-过滤阶段] 移除列表 (%d 条): [\n%s\n]", len(removed_list), removed_lines)
+
     return result_items, removed_list
 
 
@@ -250,5 +279,12 @@ def run_reranking_stage(pid, platform, items, removed_detail):
     else:
         changed = [(i+1, rid) for i, (rid, oid) in enumerate(zip(rerank_order, all_ids)) if rid != oid]
         logger.info("[TwoStage] 重排生效，共 %d 个位置发生变化", len(changed))
+
+    # 打印解析后的重排结果
+    id_to_item = {str(item.get('id', '')): item for item in items}
+    rerank_lines = "\n".join("    {}: {}".format(
+        i, format_item_info(id_to_item.get(rid, {"id": rid}))
+    ) for i, rid in enumerate(rerank_order, 1))
+    logger.info("[TwoStage-重排阶段] 重排列表 (%d 条): [\n%s\n]", len(rerank_order), rerank_lines)
 
     return rerank_order

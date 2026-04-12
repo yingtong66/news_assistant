@@ -19,8 +19,13 @@ import '../pages/Profile/Profile.css';
 const { Search } = Input;
 
 // 历史偏好展示区（可折叠）
-const HistoryPreference = ({ personalities, loading, onRefresh }) => {
+const HistoryPreference = ({ personalities, loading, onRefresh, onCollapseChange }) => {
     const [collapsed, setCollapsed] = useState(false);
+    const handleToggle = () => {
+        const next = !collapsed;
+        setCollapsed(next);
+        if (onCollapseChange) onCollapseChange(next);
+    };
     // 解析多行格式：只取 "- " 开头的行，区分正向/负向区块
     const posTags = [];
     const negTags = [];
@@ -46,7 +51,7 @@ const HistoryPreference = ({ personalities, loading, onRefresh }) => {
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: collapsed ? 0 : 8 }}>
                 <span
                     style={{ fontWeight: 'bold', fontSize: 13, color: '#555', flex: 1, cursor: 'pointer', userSelect: 'none' }}
-                    onClick={() => setCollapsed(c => !c)}
+                    onClick={handleToggle}
                 >
                     历史偏好 {collapsed ? <DownOutlined style={{ fontSize: 10 }} /> : <UpOutlined style={{ fontSize: 10 }} />}
                 </span>
@@ -241,6 +246,28 @@ const Dashboard = ({ isOpen, openBuddy }) => {
             })
             .catch(() => { setPrefLoading(false); setEnabled(true); setChatLoading(false); });
     };
+    // 历史偏好折叠时，重新加载聊天引导语（无偏好模式）
+    const handlePreferenceCollapseChange = (isCollapsed) => {
+        setEnabled(false);
+        setChatLoading(true);
+        setChatHistory([]);
+        setGuidanceQuestion('');
+        setNowSid(-1);
+        const url = isCollapsed
+            ? `${backendUrl}/guided_chat/start?pid=${userPid}&platform=0&no_preference=1`
+            : `${backendUrl}/guided_chat/start?pid=${userPid}&platform=0`;
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                const q = data['data']['guidance_question'];
+                setGuidanceQuestion(q);
+                setChatHistory([{ sender: 'bot', message: q, avatar: botAvatar }]);
+                setEnabled(true);
+                setChatLoading(false);
+            })
+            .catch(() => { setEnabled(true); setChatLoading(false); });
+    };
+
     const chatEndRef = useRef(null);
     const title = 0; // 规则配置助手
 
@@ -415,7 +442,7 @@ const Dashboard = ({ isOpen, openBuddy }) => {
                 {/* 左列：历史偏好 + 聊天 */}
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, borderRight: '1px solid #e8e8e8', overflow: 'hidden' }}>
                     {/* 历史偏好 */}
-                    <HistoryPreference personalities={personalities} loading={prefLoading} onRefresh={refreshPreference} />
+                    <HistoryPreference personalities={personalities} loading={prefLoading} onRefresh={refreshPreference} onCollapseChange={handlePreferenceCollapseChange} />
 
                     {/* 聊天框 */}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

@@ -113,30 +113,36 @@ def reorder_rerank(request):
         platform_idx = params.get('platform', 0)
         platform = PLATFORM_CHOICES[platform_idx][0]
         items = params.get('items', [])
+        original_items = params.get('original_items', items)
         removed_detail = params.get('removed_list', [])
         experiment = params.get('experiment', False)
 
         from online_TwoStage.pipeline import run_reranking_stage
         order = run_reranking_stage(pid, platform, items, removed_detail)
 
-        # 实验模式: 只展示前 EXPERIMENT_SHOW_N 条
-        if experiment:
-            order = order[:EXPERIMENT_SHOW_N]
-            logger.info("[reorder_rerank] 实验模式: 截取前 %d 条展示", EXPERIMENT_SHOW_N)
-
-        # 写入重排日志
+        # 写入重排日志（保存完整重排顺序）
         from agent.models import ReorderLog
         rules = Rule.objects.filter(pid=pid, platform=platform, isactive=True)
         positive_group = [r.rule for r in rules if r.rule.startswith("我想看")]
         negative_group = [r.rule for r in rules if r.rule.startswith("我不想看")]
         ReorderLog.objects.create(
             pid=pid, platform=platform,
-            input_items=json.dumps([{"id": str(it.get("id", "")), "title": it.get("title", "")} for it in items], ensure_ascii=False),
+            input_items=json.dumps([{
+                "id": str(it.get("id", "")),
+                "title": it.get("title", ""),
+                "source": it.get("source", ""),
+                "time": it.get("time", ""),
+            } for it in original_items], ensure_ascii=False),
             output_order=json.dumps(order, ensure_ascii=False),
             removed_items=json.dumps(removed_detail, ensure_ascii=False),
             positive_rules=json.dumps(positive_group, ensure_ascii=False),
             negative_rules=json.dumps(negative_group, ensure_ascii=False),
         )
+
+        # 实验模式: 只展示前 EXPERIMENT_SHOW_N 条（日志已保存完整顺序）
+        if experiment:
+            order = order[:EXPERIMENT_SHOW_N]
+            logger.info("[reorder_rerank] 实验模式: 截取前 %d 条展示", EXPERIMENT_SHOW_N)
 
         return build_response(SUCCESS, {"order": order})
     return build_response(FAILURE, None)
@@ -719,6 +725,16 @@ def guided_chat_start(request):
     pid = request.GET.get('pid', '')
     platform_idx = int(request.GET.get('platform', 0))
     platform = PLATFORM_CHOICES[platform_idx][0]
+    no_preference = request.GET.get('no_preference', '') == '1'
+
+    # 无偏好模式：直接返回冷启动引导语
+    if no_preference:
+        guidance_question = get_guidance_question("")
+        logger.info("[GuidedChat] start(no_preference): pid=%s", pid)
+        return build_response(SUCCESS, {
+            "guidance_question": guidance_question,
+            "has_preference": False,
+        })
 
     # 检查是否有新的浏览记录需要刷新偏好
     personality = Personalities.objects.filter(pid=pid, platform=platform).first()

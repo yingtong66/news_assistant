@@ -24,13 +24,10 @@ FILTERING_PROMPT = """你是新闻推荐系统中的过滤智能体。
 严格输出如下 JSON，不要输出其他内容：
 ```json
 {{
-  "filtered_list": [
-    {{"id": "xxx", "title": "xxx"}},
-    ...
-  ],
+  "filtered_list": ["1", "3", "5"],
   "removed_list": [
-    {{"id": "xxx", "title": "xxx", "reason": "违反规则：xxx"}},
-    ...
+    {{"id": "2", "reason": "违反规则：..."}},
+    {{"id": "4", "reason": "违反规则：..."}}
   ]
 }}
 ```"""
@@ -61,9 +58,6 @@ RERANKING_PROMPT = """你是新闻推荐系统中的重排智能体。
 严格输出如下 JSON，不要输出其他内容：
 ```json
 {{
-  "rerank_list": [
-    {{"id": "xxx", "title": "xxx"}},
-    ...
-  ]
+  "rerank_list": ["3", "1", "5", "2", "4"]
 }}
 ```"""

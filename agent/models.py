@@ -153,7 +153,7 @@ class ReorderLog(models.Model):
     pid = models.CharField(max_length=10, verbose_name='参与者')
     platform = models.CharField(max_length=10, choices=PLATFORM_CHOICES, verbose_name='平台')
     input_items = models.TextField(verbose_name='输入列表')
-    output_order = models.TextField(verbose_name='输出顺序')
+    output_order = models.TextField(verbose_name='重排顺序')
     removed_items = models.TextField(default='[]', verbose_name='移除列表')
     positive_rules = models.TextField(default='', verbose_name='正向规则')
     negative_rules = models.TextField(default='', verbose_name='负向规则')
