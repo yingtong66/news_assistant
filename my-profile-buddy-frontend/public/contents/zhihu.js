@@ -597,11 +597,9 @@ async function setupFeedObserver(options) {
   };
 
   // 自动滚动收集条目，持续滚动直到收集够 TOP_N 条图文
-  const MAX_STALE_ROUNDS = 5; // 连续无新增轮次上限，超过则放弃
   const MAX_SCROLL_TIMES = 10; // 滚动次数上限
   const autoScrollAndCollect = async () => {
     let scrollCount = 0;
-    let staleRounds = 0; // 连续未新增条目的轮次
     while (scrollCount < MAX_SCROLL_TIMES) {
       const currentCount = targetNode.querySelectorAll(initialSelector).length;
       if (currentCount >= TOP_N) {
@@ -616,27 +614,14 @@ async function setupFeedObserver(options) {
       await new Promise(resolve => setTimeout(resolve, 1200));
       // 标记新出现的元素
       const newElements = targetNode.querySelectorAll(initialSelector);
-      let newCount = 0;
       newElements.forEach((el) => {
         if (!el.dataset.originalOrder) {
           markOriginalOrder(el, originalIndex, experiment);
           processElement(el, platform);
           originalIndex += 1;
-          newCount++;
         }
       });
       if (platform === 0) cleanToutiaoNonArticles();
-      // 检测是否有新增，连续无新增则放弃
-      if (newCount === 0) {
-        staleRounds++;
-        console.log("[MPB] 本轮无新增条目, 连续无新增 " + staleRounds + "/" + MAX_STALE_ROUNDS);
-        if (staleRounds >= MAX_STALE_ROUNDS) {
-          console.log("[MPB] 连续 " + MAX_STALE_ROUNDS + " 轮无新增, 停止滚动");
-          break;
-        }
-      } else {
-        staleRounds = 0;
-      }
     }
     // 滚动结束后检查并重排
     await checkAndReorder();

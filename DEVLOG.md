@@ -3,6 +3,7 @@
 ## 2026-04-12 前端细节修复
 
 - 过滤解析失败兜底: `run_filtering` 解析失败时返回 id 列表而非原始 dict，修复 `unhashable type: 'dict'` 错误
+- 滚动收集停止条件简化: 去掉"连续5轮无新增则放弃"逻辑，仅保留两个停止条件: 收集够 TOP_N / 滚动达10次上限
 - 等待页面渲染: 自动滚动前先轮询等待至少 1 个图文元素出现（最多 10 秒），解决刷新后抓取 0 条的问题
 - 头条清理: `cleanToutiaoNonArticles` 新增删除右下角浮动工具栏（`.ttp-toolbar`）
 - "原序:n"标识仅在非实验模式下显示，`markOriginalOrder` 新增 `experiment` 参数控制
