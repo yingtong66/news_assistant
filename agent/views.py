@@ -160,18 +160,18 @@ def browse(request): #ok 需要改这个！
     """监控推荐记录+依上下文操纵呈现内容
     Args:
         request: Django HTTP请求对象，包含POST请求数据
-        
+
     Returns:
         JsonResponse: 包含操作结果和过滤数据的响应
     """
     if request.method == 'POST':
         # 解析请求体中的JSON数据
         params = json.loads(request.body)
-        
+
         # 获取当前用户和平台的有效规则
         all_rules = Rule.objects.filter(pid=params['pid'], platform=PLATFORM_CHOICES[params['platform']][0], isactive=True)
-        all_rules_json = json.loads(serializers.serialize('json', all_rules)) 
-        
+        all_rules_json = json.loads(serializers.serialize('json', all_rules))
+
         # 创建新的浏览记录对象
         interaction = Record(pid=params['pid'],
                              platform=PLATFORM_CHOICES[params['platform']][0],
@@ -179,10 +179,10 @@ def browse(request): #ok 需要改这个！
                              content=params['content'],
                              url=params['url'],
                              is_filter=params['is_filter'])
-        
+
         # 初始化返回数据为0（不过滤）
         data = 0
-        
+
         # 如果需要进行内容过滤
         if params['is_filter']: # 是否打开了插件
             # 调用过滤函数，获取过滤结果、原因和匹配的规则
@@ -191,10 +191,10 @@ def browse(request): #ok 需要改这个！
             interaction.filter_result = filter_result  # 记录过滤结果
             interaction.filter_reason = filter_reason  # 记录过滤原因
             interaction.context = rule  # 记录匹配的规则上下文
-        
+
         # 保存浏览记录到数据库
         interaction.save()
-        
+
         # 返回成功响应和过滤数据
         return build_response(SUCCESS, data)
 
@@ -211,7 +211,7 @@ def click(request): #ok
         interaction.click = True
         interaction.save()
         return build_response(SUCCESS, None)
-    
+
 def report(request): #废弃
     """报表"""
     if request.method == 'GET':
@@ -226,7 +226,7 @@ def report(request): #废弃
             'click_time': interaction.click_time,
         } for interaction in interactions]
         return build_response('成功', SUCCESS, interactions_dict_list)
-    
+
 def dialogue(request): #ok
     """与用户对话
     Args:
@@ -253,13 +253,13 @@ def dialogue(request): #ok
         session = Session(pid=pid, task=task, platform=platform, summary="This is a session")
         session.save()
         sid = session.id  # 更新会话ID
-        
+
         # 根据任务类型设置初始系统消息
         if task == 0:
             # 任务0：获取个性化设置并发送欢迎消息
             personalities = Personalities.objects.filter(pid=pid, platform=platform)
             if len(personalities) != 0:
-                personalities = personalities.first() 
+                personalities = personalities.first()
                 sys_message = Message(session=session, content=personalities.first_response, sender='bot')
                 sys_message.save()
         elif task == 2:
@@ -271,10 +271,10 @@ def dialogue(request): #ok
     # 保存用户消息到数据库
     message = Message(session=session, content=content, sender='user')
     message.save()
-    
+
     # 获取历史对话记录字符串
     messges_str = get_his_message_str(sid)
-    
+
     # 获取当前用户的规则配置
     platform_id = PLATFORMS.index(platform)  # 平台索引
     rules = Rule.objects.filter(pid=pid, platform=platform)  # 所有规则
@@ -331,7 +331,7 @@ def dialogue(request): #ok
     if len(actions) == 0:
         bot_message = Message(session=session, content=response, sender='bot')
         bot_message.save()
-    
+
     # 构建并返回响应数据
     elapsed = time.time() - t_start
     logger.info("[Dialogue] 总耗时 %.2fs | pid=%s | 输入: %s", elapsed, pid, content[:60])
@@ -349,10 +349,10 @@ def get_sessions(request): #ok
     """
     获取用户会话列表
     根据用户PID和任务类型查询对应的会话记录
-    
+
     Args:
         request: Django请求对象，包含POST请求数据
-        
+
     Returns:
         Response: 包含会话列表的响应对象
             - 成功时返回SUCCESS状态和会话列表
@@ -412,22 +412,22 @@ def save_rules(request): #ok
                 target_rules.update(rule=rule['rule'], isactive=rule['isactive'], platform=PLATFORM_CHOICES[rule['platform']][0])
                 # 记录Chilog
                 chilog = Chilog.objects.create(pid=pid, platform=PLATFORM_CHOICES[rule['platform']][0], iid=rule['iid'], rule=rule['rule'], isactive=rule['isactive'], action_type='update', isbot=isbot)
-        else:  
+        else:
             target_rules.delete()
             chilog = Chilog.objects.create(pid=pid, iid=rule_id, action_type='delete', isbot=isbot)
 
         logger.info(f"save rules of {pid}: {Rule.objects.filter(pid=pid)}")
         return build_response(SUCCESS, None)
     return build_response(FAILURE, None)
-    
+
 def get_history(request, sid): #ok
     """
     获取指定会话的历史消息记录
-    
+
     Args:
         request: Django HTTP请求对象
         sid: 会话ID，用于标识特定的对话会话
-        
+
     Returns:
         JsonResponse: 包含会话历史消息的JSON响应
             - 成功时返回包含消息列表的响应
@@ -438,17 +438,17 @@ def get_history(request, sid): #ok
         # 查询指定会话的所有消息，按时间戳升序排列
         messages = Message.objects.filter(session=sid).order_by('timestamp')
         messages_list = []
-        
+
         # 将消息对象转换为字典格式
         for message in messages:
             messages_list.append({
                 "content": message.content,    # 消息内容
                 "sender": message.sender,      # 消息发送者
             })
-        
+
         # 返回成功的响应，包含消息列表
         return build_response(SUCCESS, {"messages": messages_list})
-    
+
     # 如果请求方法不是GET，返回失败响应
     return build_response(FAILURE, None)
 
@@ -536,19 +536,19 @@ def get_feedback(request): #ok
     data = json.loads(request.body)
     platform = PLATFORM_CHOICES[data['platform']][0]
     pid = data['pid']
-    response = feedback_to_response(pid, platform) 
-    return build_response(SUCCESS, {"response": response}) 
+    response = feedback_to_response(pid, platform)
+    return build_response(SUCCESS, {"response": response})
 
 def make_new_message(request): #ok
     """
     创建新的消息并处理用户操作反馈
-    
+
     该函数用于处理用户对AI建议操作（规则管理、搜索等）的确认或拒绝反馈，
     生成相应的系统消息，并更新相关日志记录。
-    
+
     Args:
         request: Django HTTP请求对象，包含POST请求数据
-        
+
     Returns:
         JsonResponse: 包含新消息内容和发送者信息的响应
     """
@@ -567,10 +567,10 @@ def make_new_message(request): #ok
             logger.error("[make_new_message] 找不到会话: sid=%s, pid=%s, platform=%s", sid, pid, platform)
             return build_response(FAILURE, None)
         now_session = now_session.first()
-        
+
         # 构建消息内容
         message_content = ""
-        
+
         # 处理用户接受的操作
         if len(ac_actions) != 0:
             message_content += "我帮你完成了如下操作:\n\n"
@@ -584,7 +584,7 @@ def make_new_message(request): #ok
                 elif action['type'] == 4:
                     message_content += f"* 搜索关键词: {action['keywords'][0]} \n"
             message_content += "\n"
-            
+
         # 处理用户拒绝的操作
         if len(wa_actions) != 0:
             message_content += "但是看起来，你并不希望我帮你:\n\n"
@@ -597,7 +597,7 @@ def make_new_message(request): #ok
                     message_content += f"* 更新规则: {action['profile']['rule']} \n"
                 elif action['type'] == 4:
                     message_content += f"* 搜索关键词: {action['keywords'][0]} \n"
-                    
+
         # 创建并保存消息记录
         message = Message(session=now_session, content=message_content, sender='assistant', has_action=(len(ac_actions)!=0))
         message.save()
@@ -638,7 +638,7 @@ def make_new_message(request): #ok
                 gen_content.save()
                 logger.info("新的操作:"+serializers.serialize('json', [gen_content]))
                 print("新的操作:"+serializers.serialize('json', [gen_content]))
-                
+
         # 返回成功响应
         return build_response(SUCCESS, {
             "content": message.content,
@@ -675,14 +675,14 @@ def record_user(request): #ok
     """记录用户信息并初始化用户规则配置
     Args:
         request: Django HTTP请求对象，包含POST请求数据
-        
+
     Returns:
         JsonResponse: 包含操作结果的响应
     """
     # 记录连接用户日志
     logger.debug(f"connect user:{json.loads(request.body)['pid']}")
     pid = json.loads(request.body)['pid']
-    
+
     try:
         # 检查用户是否已存在
         UserPid.objects.get(pid=pid)
@@ -692,10 +692,10 @@ def record_user(request): #ok
         # 如果用户不存在，创建新用户
         logger.debug(f"create new user: {pid}")
         UserPid.objects.create(pid=pid)
-        
+
     # 从请求体中获取用户配置的规则列表
     profiles = json.loads(request.body)['profiles']
-    
+
     # 遍历所有配置规则并创建到数据库
     for profile in profiles:
         Rule.objects.create(iid=profile['iid'],          # 规则ID
@@ -706,7 +706,7 @@ def record_user(request): #ok
 
     # 记录用户激活和配置信息日志
     logger.info(f"active user:{pid}, with profile: {Rule.objects.filter(pid=pid)}")
-    
+
     # 返回成功响应
     return build_response(SUCCESS, None)
 

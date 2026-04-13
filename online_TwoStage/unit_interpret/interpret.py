@@ -27,18 +27,18 @@ def _call_llm(prompt_text):
     msg = [{"role": "user", "content": prompt_text}]
     return get_bailian_response(msg)
 
-
 # 从 Record 提取用户交互历史，运行长短期偏好解析，返回偏好总结
-def run_unit_interpret(pid, platform, max_neg=20):
+def run_unit_interpret(pid, platform, max_pos=50, max_neg=20):
     """
     Returns:
         (result_dict, fallback)
         result_dict: {"positive_group": [...], "negative_group": [...]}
         fallback: True 表示解析失败，返回空结果
     """
-    # 正样本：点击过的记录，时间正序
+    # 正样本：点击过的记录，时间正序，取最近 max_pos 条
     pos_records = list(
-        Record.objects.filter(pid=pid, platform=platform, click=True).order_by("browse_time")
+        Record.objects.filter(pid=pid, platform=platform, click=True)
+        .order_by("browse_time")[:max_pos]
     )
     # 负样本：曝光但未点击，取最近 max_neg 条
     neg_records = list(

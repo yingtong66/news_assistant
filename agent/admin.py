@@ -1,4 +1,6 @@
 from django.contrib import admin
+# 新增：导入导出Admin基类
+from import_export.admin import ImportExportModelAdmin
 
 from .models import * 
 
@@ -12,7 +14,8 @@ from .models import *
 # fieldsets：详情/编辑页的字段分组与布局。
 
 
-class RecordAdmin(admin.ModelAdmin):
+# 继承 ImportExportModelAdmin 支持导出
+class RecordAdmin(ImportExportModelAdmin):
     list_display = ('pid', 'platform','title', 'filter_result', 'browse_time', 'click', 'click_time','is_filter', 'filter_reason','content')
     list_filter = ['pid', 'platform','filter_result', 'click', 'browse_time', 'click_time']
     search_fields = ['title', 'content', 'context', 'filter_reason']
@@ -22,12 +25,12 @@ class RecordAdmin(admin.ModelAdmin):
     ]
 
 
-class RuleAdmin(admin.ModelAdmin):
+class RuleAdmin(ImportExportModelAdmin):
     list_display = ('iid', 'pid', 'rule', 'isactive')
     list_filter = ['iid', 'pid', 'isactive']
     search_fields = ['rule']
 
-class SessionAdmin(admin.ModelAdmin):
+class SessionAdmin(ImportExportModelAdmin):
     def chat_history(self, obj):
         return obj.message_set.all()
     chat_history.short_description = '聊天记录'
@@ -36,27 +39,28 @@ class SessionAdmin(admin.ModelAdmin):
     list_filter = ['pid', 'task']
     search_fields = ['summary']
 
-# class MessageAdmin(admin.ModelAdmin):
-#     list_display = ('session', 'content', 'sender', 'has_action')
-#     list_filter = ['session', 'sender', 'has_action']
-#     search_fields = ['content', 'sender']
+# 取消注释，给Message也添加导出功能
+class MessageAdmin(ImportExportModelAdmin):
+    list_display = ('session', 'content', 'sender', 'has_action')
+    list_filter = ['session', 'sender', 'has_action']
+    search_fields = ['content', 'sender']
 
-class ChilogAdmin(admin.ModelAdmin):
+class ChilogAdmin(ImportExportModelAdmin):
     list_display = ('pid', 'iid', 'action_type', "isbot", "rule")
     list_filter = ['pid', 'iid', 'action_type', "isbot"]
     search_fields = ['pid', 'iid', 'action_type','rule']
 
-class GenContentlogAdmin(admin.ModelAdmin):
+class GenContentlogAdmin(ImportExportModelAdmin):
     list_display = ('pid', 'action_type','new_rule', 'is_ac', "old_rule", "change_rule")
     list_filter = ['pid', 'action_type','is_ac']
     search_fields = ['new_rule','old_rule', "change_rule"]
 
-class SearchlogAdmin(admin.ModelAdmin):
+class SearchlogAdmin(ImportExportModelAdmin):
     list_display = ('pid', 'gen_keyword','edited_keyword', 'is_accepted')
     list_filter = ['pid', 'is_accepted']
     search_fields = ['gen_keyword','edited_keyword']
 
-class PersonalitiesAdmin(admin.ModelAdmin):
+class PersonalitiesAdmin(ImportExportModelAdmin):
     list_display = ('pid', 'personality','personality_click', 'first_response')
     list_filter = ['pid',]
     search_fields = ['personality','personality_click', 'first_response']
@@ -65,15 +69,15 @@ class PersonalitiesAdmin(admin.ModelAdmin):
 admin.site.register(Record, RecordAdmin)
 admin.site.register(Rule, RuleAdmin)
 admin.site.register(Session, SessionAdmin)
-admin.site.register(Message)
+admin.site.register(Message, MessageAdmin)  # 绑定导出配置
 admin.site.register(Chilog, ChilogAdmin)
 admin.site.register(GenContentlog, GenContentlogAdmin)
-# admin.site.register(Searchlog, SearchlogAdmin)
+admin.site.register(Searchlog, SearchlogAdmin)  # 取消注释，启用导出
 admin.site.register(Personalities, PersonalitiesAdmin)
 admin.site.register(PersonalitiesClick)
 
 
-class ReorderLogAdmin(admin.ModelAdmin):
+class ReorderLogAdmin(ImportExportModelAdmin):
     list_display = ('pid', 'platform', 'timestamp')
     list_filter = ['pid', 'platform']
     search_fields = ['pid']

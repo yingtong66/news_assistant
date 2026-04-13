@@ -31,7 +31,7 @@ ALLOWED_HOSTS = ["*"]
 # Application definition
 
 INSTALLED_APPS = [
-    "agent.apps.AgentConfig", 
+    "agent.apps.AgentConfig",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'corsheaders',          # 新加入的跨域请求插件django-cors-headers
     'django_apscheduler',     # 临时注释：新加入的定时任务插件django-apscheduler
     'django_extensions',
+    'import_export',
 ]
 
 MIDDLEWARE = [

@@ -1,8 +1,8 @@
 {
     "bailian": {
         "api": "sk-17a464e6c10846f0ae172a712d9e0033",
-        "model": "qwen-plus",
-        "dialog": "qwen-plus"
+        "model": "qwen3.6-plus",
+        "dialog": "qwen3.6-plus"
     },
     "rah": {
         "update_interval_min": 15
