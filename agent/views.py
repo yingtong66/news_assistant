@@ -55,17 +55,6 @@ def reorder(request):
         items = params.get('items', [])
         experiment = params.get('experiment', False)
 
-        # 批量写入浏览记录
-        for item in items:
-            Record.objects.create(
-                pid=pid,
-                platform=platform,
-                title=item.get('title', ''),
-                content='',
-                url='',
-                is_filter=True,
-            )
-
         from online_TwoStage.pipeline import run_two_stage_reorder
         order, removed_detail, positive_group = run_two_stage_reorder(pid, platform, items)
 
@@ -86,13 +75,6 @@ def reorder_filter(request):
         platform_idx = params.get('platform', 0)
         platform = PLATFORM_CHOICES[platform_idx][0]
         items = params.get('items', [])
-
-        # 批量写入浏览记录
-        for item in items:
-            Record.objects.create(
-                pid=pid, platform=platform,
-                title=item.get('title', ''), content='', url='', is_filter=True,
-            )
 
         from online_TwoStage.pipeline import run_filtering_stage
         filtered_items, removed_list = run_filtering_stage(pid, platform, items)

@@ -1,5 +1,11 @@
 # DEVLOG
 
+## 2026-04-13 浏览记录改为全量上报 + 头条 URL 宽松匹配
+
+- 浏览记录全量上报: 之前只有参与重排的前 top_n 条卡片在后端 `reorder_filter`/`reorder` 中批量写入 Record，后续加载的卡片无记录。改为前端 `processElement` 逐条通过 `build_request_browse` 上报 `/browse`，所有加载到页面的卡片都记录。后端 `reorder_filter` 和 `reorder` 中的批量 `Record.objects.create` 已移除，避免重复
+- 头条 URL 宽松匹配: `setupFeedObserver` 的 URL 检查从严格相等 `href !== url` 改为支持正则（`url instanceof RegExp` 则用 `.test()`）。头条配置从 `"https://www.toutiao.com/"` 改为 `/^https?:\/\/www\.toutiao\.com\//`，匹配所有包含 `www.toutiao.com` 的路径
+- 安装缺失依赖 `django-import-export`
+
 ## 2026-04-12 前端细节修复
 
 - 过滤解析失败兜底: `run_filtering` 解析失败时返回 id 列表而非原始 dict，修复 `unhashable type: 'dict'` 错误

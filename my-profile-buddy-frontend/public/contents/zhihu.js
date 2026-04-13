@@ -175,7 +175,18 @@ async function processElement(element, platform=0) {
       // }
     }
 
-    // 浏览记录由 /reorder 后端批量写入，此处不单独请求
+    // 每个加载的卡片都上报浏览记录
+    if (title) {
+      const jsonData = JSON.stringify({
+        pid: userPid,
+        platform: platform,
+        title: title,
+        content: content,
+        url: url,
+        is_filter: false,
+      });
+      chrome.runtime.sendMessage({ type: "build_request_browse", data: jsonData });
+    }
 }
 
 
@@ -527,8 +538,10 @@ async function setupFeedObserver(options) {
     reorderKey,
   } = options;
 
-  // 检查当前页面是否为目标页面
-  if (this.window.location.href !== url) return;
+  // 检查当前页面是否为目标页面（支持正则和字符串）
+  const currentHref = this.window.location.href;
+  const urlMatched = (url instanceof RegExp) ? url.test(currentHref) : (currentHref === url);
+  if (!urlMatched) return;
 
   // 获取目标容器元素
   const targetNode = document.querySelector(containerSelector);
@@ -736,7 +749,7 @@ window.addEventListener('load', function () {
       reorderKey: "bilibili",
     },
     {
-      url: "https://www.toutiao.com/",
+      url: /^https?:\/\/www\.toutiao\.com\//,
       initialSelector: ".feed-card-wrapper.feed-card-article-wrapper",
       containerSelector: ".ttp-feed-module > div:not(.main-nav-wrapper)",
       platform: 0,
