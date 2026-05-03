@@ -227,11 +227,13 @@ Django 项目配置层（`settings.py`、`urls.py`）。
 
 | 文件                     | 路由           | 说明                               |
 | ---------------------- | ------------ | -------------------------------- |
-| `Dashboard.jsx`        | `/home`      | **主入口**：历史偏好（正/负分区）+ 引导对话 + 规则列表 |
+| `Dashboard.jsx`        | `/home`      | **主入口**：历史偏好（正/负分区）+ 引导对话 + 规则列表，紫色卡片式布局 |
+| `Dashboard.css`        | —            | Dashboard 独立样式（紫色主题、卡片、标签、渐变按钮） |
 | `ProfileAlignment.jsx` | `/alignment` | 画像对齐对话（Chatbot title=1）          |
 | `Feedback.jsx`         | `/feedback`  | 反馈对话（Chatbot title=2）            |
 | `Profile/Profile.jsx`  | `/profile`   | 独立规则管理页                          |
 | `EmptyPage.jsx`        | `/`          | 插件关闭时占位页                         |
+| `RegisterPage.jsx`     | —            | 首次使用注册页（输入用户名）                   |
 
 
 ### components/（组件）

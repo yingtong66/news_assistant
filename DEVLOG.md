@@ -1,5 +1,23 @@
 # DEVLOG
 
+## 2026-05-03 Dashboard UI 全面重构为紫色主题
+
+### 变更
+- Dashboard.jsx 完全重写，从蓝色扁平风格改为紫色卡片式布局，匹配新设计稿
+- 新建 Dashboard.css，独立样式文件，不再依赖 Chatbot.css / Profile.css
+- 布局改为：顶部标题栏（机器人头像+标题+副标题+开关）+ 左右分栏主体
+- 左列：历史偏好卡片（上半）+ 推荐助手聊天卡片（下半），各占50%高度，独立滚动
+- 右列：已有规则卡片（虚线边框规则项，紫色编辑/红色删除实心按钮）
+- 输入框从全宽底部移入聊天卡片内部底部
+- 引入 icon 资源：icon_flag（历史偏好标题）、icon_robot-1（顶部+推荐助手标题）、icon_robot-2（对话中bot头像）、icon_rule（已有规则标题）
+- 偏好标签去掉外边框，正向淡蓝底/负向淡红底
+- 折叠箭头方向修正：展开时显示向下箭头，折叠时显示向上箭头
+- 标题文案"新闻"改为"资讯"
+
+### 新增文件
+- `src/pages/Dashboard.css`
+- `src/images/icon_flag.png`, `icon_robot-1.png`, `icon_robot-2.png`, `icon_rule.png`（从 asset/icon/ 复制）
+
 ## 2026-04-13 浏览记录改为全量上报 + 头条 URL 宽松匹配
 
 - 浏览记录全量上报: 之前只有参与重排的前 top_n 条卡片在后端 `reorder_filter`/`reorder` 中批量写入 Record，后续加载的卡片无记录。改为前端 `processElement` 逐条通过 `build_request_browse` 上报 `/browse`，所有加载到页面的卡片都记录。后端 `reorder_filter` 和 `reorder` 中的批量 `Record.objects.create` 已移除，避免重复

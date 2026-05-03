@@ -14,7 +14,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 20px;
+    padding: 8px 16px;
     background: #fff;
     border-bottom: 1px solid #f0eef5;
     flex-shrink: 0;
@@ -27,8 +27,8 @@
 }
 
 .header-robot-icon {
-    width: 36px;
-    height: 36px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
 }
 
@@ -38,15 +38,15 @@
 }
 
 .header-title {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 700;
     color: #1a1a2e;
 }
 
 .header-subtitle {
-    font-size: 12px;
+    font-size: 11px;
     color: #7c6fb0;
-    margin-top: 2px;
+    margin-top: 1px;
 }
 
 .header-switch .ant-switch {
@@ -62,7 +62,7 @@
     display: flex;
     flex: 1;
     overflow: hidden;
-    padding: 12px;
+    padding: 8px 12px;
     gap: 12px;
 }
 
@@ -70,8 +70,22 @@
     display: flex;
     flex-direction: column;
     flex: 1;
-    gap: 12px;
+    gap: 8px;
     overflow: hidden;
+}
+
+.dashboard-left > .dash-card {
+    flex: 1;
+    min-height: 0;
+    max-height: 50%;
+    overflow-y: auto;
+}
+
+.dashboard-left > .dash-card {
+    flex: 1;
+    min-height: 0;
+    max-height: 50%;
+    overflow-y: auto;
 }
 
 .dashboard-right {
@@ -86,7 +100,7 @@
     background: #fff;
     border-radius: 12px;
     border: 1px solid #ede9f6;
-    padding: 10px 16px;
+    padding: 6px 12px;
     box-shadow: 0 1px 4px rgba(124, 58, 237, 0.04);
 }
 
@@ -94,7 +108,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .card-title {
@@ -183,11 +197,24 @@
 
 /* 聊天卡片 */
 .chat-card {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: hidden !important;
     padding-bottom: 8px;
+}
+
+.chat-card .card-header {
+    flex-shrink: 0;
+}
+
+.chat-card .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.chat-card .chat-footer {
+    flex-shrink: 0;
 }
 
 .chat-messages {
@@ -334,12 +361,11 @@
 .chat-footer {
     display: flex;
     align-items: center;
-    padding: 8px 0 0;
     gap: 10px;
     flex-shrink: 0;
     border-top: 1px solid #f0eef5;
-    margin-top: 6px;
-    padding-top: 10px;
+    margin-top: 4px;
+    padding-top: 6px;
 }
 
 .input-wrapper {
