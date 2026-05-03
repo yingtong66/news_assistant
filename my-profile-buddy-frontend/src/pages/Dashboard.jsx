@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Button, Flex, Input, List, Modal, Select, Spin, Tag, Tooltip, Typography } from 'antd';
-import { ReloadOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
+import { ReloadOutlined, DownOutlined, UpOutlined, PlusOutlined, EditOutlined, DeleteOutlined, SendOutlined } from '@ant-design/icons';
 import TextArea from 'antd/es/input/TextArea';
 import { Form } from 'antd';
 import Markdown from 'react-markdown';
@@ -12,9 +12,12 @@ import { Link } from 'react-router-dom';
 import UserContext from '../contexts/UserContext';
 import ChangeProfile from '../components/ChangeProfile';
 import userAvatar from '../images/user-avatar.png';
-import botAvatar from '../images/bot-avatar.png';
-import '../components/Chatbot/Chatbot.css';
-import '../pages/Profile/Profile.css';
+import botAvatar from '../images/icon_robot-2.png';
+import iconFlag from '../images/icon_flag.png';
+import iconRobot1 from '../images/icon_robot-1.png';
+import iconRobot2 from '../images/icon_robot-2.png';
+import iconRule from '../images/icon_rule.png';
+import './Dashboard.css';
 
 const { Search } = Input;
 
@@ -26,7 +29,6 @@ const HistoryPreference = ({ personalities, loading, onRefresh, onCollapseChange
         setCollapsed(next);
         if (onCollapseChange) onCollapseChange(next);
     };
-    // 解析多行格式：只取 "- " 开头的行，区分正向/负向区块
     const posTags = [];
     const negTags = [];
     if (personalities) {
@@ -43,18 +45,13 @@ const HistoryPreference = ({ personalities, loading, onRefresh, onCollapseChange
     }
     const hasAny = posTags.length > 0 || negTags.length > 0;
     return (
-        <div style={{
-            borderBottom: '1px solid #e8e8e8',
-            padding: '10px 12px',
-            background: '#fafafa',
-        }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: collapsed ? 0 : 8 }}>
-                <span
-                    style={{ fontWeight: 'bold', fontSize: 13, color: '#555', flex: 1, cursor: 'pointer', userSelect: 'none' }}
-                    onClick={handleToggle}
-                >
-                    历史偏好 {collapsed ? <DownOutlined style={{ fontSize: 10 }} /> : <UpOutlined style={{ fontSize: 10 }} />}
-                </span>
+        <div className="dash-card">
+            <div className="card-header">
+                <div className="card-title" onClick={handleToggle} style={{ cursor: 'pointer' }}>
+                    <img src={iconFlag} alt="flag" className="card-icon" />
+                    <span>历史偏好</span>
+                    {collapsed ? <UpOutlined style={{ fontSize: 10, marginLeft: 6 }} /> : <DownOutlined style={{ fontSize: 10, marginLeft: 6 }} />}
+                </div>
                 {!collapsed && (
                     <Tooltip title="重新分析历史偏好">
                         <Button
@@ -63,7 +60,7 @@ const HistoryPreference = ({ personalities, loading, onRefresh, onCollapseChange
                             icon={<ReloadOutlined />}
                             loading={loading}
                             onClick={onRefresh}
-                            style={{ color: '#1677ff' }}
+                            className="refresh-btn"
                         />
                     </Tooltip>
                 )}
@@ -71,37 +68,33 @@ const HistoryPreference = ({ personalities, loading, onRefresh, onCollapseChange
             {!collapsed && (
                 <Spin spinning={loading} size="small">
                     {hasAny ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {/* 正向偏好 */}
-                            <div>
-                                <div style={{ fontSize: 11, color: '#1677ff', fontWeight: 'bold', marginBottom: 4 }}>正向偏好</div>
-                                {posTags.length > 0 ? (
-                                    <Flex wrap="wrap" gap={4}>
-                                        {posTags.map((tag, i) => (
-                                            <Tag key={i} color="blue" style={{ fontSize: 12 }}>{tag}</Tag>
-                                        ))}
-                                    </Flex>
-                                ) : (
-                                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>暂无</Typography.Text>
-                                )}
+                        <div className="pref-content">
+                            <div className="pref-section">
+                                <div className="pref-label pref-label-pos">
+                                    <span className="pref-dot dot-pos"></span>
+                                    正向偏好
+                                </div>
+                                <Flex wrap="wrap" gap={8}>
+                                    {posTags.map((tag, i) => (
+                                        <Tag key={i} className="pref-tag tag-pos">{tag}</Tag>
+                                    ))}
+                                </Flex>
                             </div>
-                            {/* 负向偏好 */}
-                            <div>
-                                <div style={{ fontSize: 11, color: '#ff4d4f', fontWeight: 'bold', marginBottom: 4 }}>负向偏好</div>
-                                {negTags.length > 0 ? (
-                                    <Flex wrap="wrap" gap={4}>
-                                        {negTags.map((tag, i) => (
-                                            <Tag key={i} color="red" style={{ fontSize: 12 }}>{tag}</Tag>
-                                        ))}
-                                    </Flex>
-                                ) : (
-                                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>暂无</Typography.Text>
-                                )}
+                            <div className="pref-section">
+                                <div className="pref-label pref-label-neg">
+                                    <span className="pref-dot dot-neg"></span>
+                                    负向偏好
+                                </div>
+                                <Flex wrap="wrap" gap={8}>
+                                    {negTags.map((tag, i) => (
+                                        <Tag key={i} className="pref-tag tag-neg">{tag}</Tag>
+                                    ))}
+                                </Flex>
                             </div>
                         </div>
                     ) : (
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                            暂时还没有足够的浏览记录，继续使用后我会逐渐了解你的偏好～
+                        <Typography.Text type="secondary" style={{ fontSize: 13, padding: '12px 0', display: 'block' }}>
+                            暂时还没有足够的浏览记录，继续使用后我会逐渐了解你的偏好~
                         </Typography.Text>
                     )}
                 </Spin>
@@ -137,8 +130,8 @@ const ProfileCard = ({ item, delFunc, saveFunc, toggleEdit, edit, isModalOpen, s
 
     return (
         <Form>
-            <div className="list-item" style={{ padding: '8px', marginBottom: '6px' }}>
-                <div className="item-title">
+            <div className="rule-card">
+                <div className="rule-content">
                     <TextArea
                         placeholder="输入规则..."
                         onChange={handleChange}
@@ -146,15 +139,16 @@ const ProfileCard = ({ item, delFunc, saveFunc, toggleEdit, edit, isModalOpen, s
                         disabled={!edit}
                         value={formData.rule}
                         autoSize={{ minRows: 2, maxRows: 4 }}
-                        style={{ fontSize: 12 }}
+                        className="rule-textarea"
+                        bordered={false}
                     />
                 </div>
-                <div className="item-controls" style={{ flexWrap: 'wrap', gap: 4 }}>
+                <div className="rule-controls">
                     {edit
-                        ? <Button key="save" type="primary" size="small" onClick={() => saveFunc(formData)}>保存</Button>
-                        : <Button key="edit" type="primary" size="small" onClick={toggleEdit}>编辑</Button>
+                        ? <Button key="save" type="primary" size="small" onClick={() => saveFunc(formData)} className="btn-edit">保存</Button>
+                        : <Button key="edit" size="small" onClick={toggleEdit} icon={<EditOutlined />} className="btn-edit">编辑</Button>
                     }
-                    <Button key="del" type="primary" danger size="small" onClick={() => setIsModalOpen()}>删除</Button>
+                    <Button key="del" size="small" danger onClick={() => setIsModalOpen()} icon={<DeleteOutlined />} className="btn-delete">删除</Button>
                     <Modal
                         title="此操作不可逆!"
                         open={isModalOpen}
@@ -172,7 +166,7 @@ const ProfileCard = ({ item, delFunc, saveFunc, toggleEdit, edit, isModalOpen, s
                         disabled={!edit}
                         onChange={handleActiveChange}
                         size="small"
-                        style={{ width: 65 }}
+                        className="rule-select"
                     />
                 </div>
             </div>
@@ -188,7 +182,6 @@ const Dashboard = ({ isOpen, openBuddy }) => {
     const [prefLoading, setPrefLoading] = useState(true);
 
     useEffect(() => {
-        // 加载用户历史偏好
         fetch(`${backendUrl}/get_alignment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -212,7 +205,6 @@ const Dashboard = ({ isOpen, openBuddy }) => {
     const [action, setAction] = useState([]);
     const [guidanceQuestion, setGuidanceQuestion] = useState('');
 
-    // 强制刷新历史偏好：清除缓存，重新运行三步LLM，并刷新聊天引导语
     const refreshPreference = () => {
         setPrefLoading(true);
         setEnabled(false);
@@ -224,7 +216,6 @@ const Dashboard = ({ isOpen, openBuddy }) => {
             .then(r => r.json())
             .then(data => {
                 const res = data['data'];
-                // 刷新偏好标签（从后端重新拉取）
                 fetch(`${backendUrl}/get_alignment`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -237,7 +228,6 @@ const Dashboard = ({ isOpen, openBuddy }) => {
                         setPrefLoading(false);
                     })
                     .catch(() => setPrefLoading(false));
-                // 刷新聊天引导语
                 const q = res['guidance_question'];
                 setGuidanceQuestion(q);
                 setChatHistory([{ sender: 'bot', message: q, avatar: botAvatar }]);
@@ -246,7 +236,7 @@ const Dashboard = ({ isOpen, openBuddy }) => {
             })
             .catch(() => { setPrefLoading(false); setEnabled(true); setChatLoading(false); });
     };
-    // 历史偏好折叠时，重新加载聊天引导语（无偏好模式）
+
     const handlePreferenceCollapseChange = (isCollapsed) => {
         setEnabled(false);
         setChatLoading(true);
@@ -269,10 +259,9 @@ const Dashboard = ({ isOpen, openBuddy }) => {
     };
 
     const chatEndRef = useRef(null);
-    const title = 0; // 规则配置助手
+    const title = 0;
 
     useEffect(() => {
-        // 每次打开清空历史，主动输出引导语
         setEnabled(false);
         setChatLoading(true);
         setNowSid(-1);
@@ -291,7 +280,6 @@ const Dashboard = ({ isOpen, openBuddy }) => {
     }, []);
 
     useEffect(() => {
-        // 新消息时滚动到底部
         if (chatEndRef.current) {
             chatEndRef.current.scrollTop = chatEndRef.current.scrollHeight;
         }
@@ -304,7 +292,6 @@ const Dashboard = ({ isOpen, openBuddy }) => {
         setEnabled(false);
         setMessage('');
 
-        // 引导模式：首条回复走 /guided_chat/summarize
         if (guidanceQuestion) {
             fetch(`${backendUrl}/guided_chat/summarize`, {
                 method: 'POST',
@@ -319,7 +306,6 @@ const Dashboard = ({ isOpen, openBuddy }) => {
                         setGuidanceQuestion('');
                         setAction(res.actions);
                     } else {
-                        // 普通回复：展示内容，保持引导状态继续等待偏好表达
                         const reply = res.content || res.message || '未检测到明确需求，请重新描述您想看或不想看的内容。';
                         setChatHistory(h => [...h, { sender: 'bot', message: reply, avatar: botAvatar }]);
                     }
@@ -354,7 +340,6 @@ const Dashboard = ({ isOpen, openBuddy }) => {
     const [isModalOpen, setIsModalOpen] = useState([]);
 
     const loadRules = async () => {
-        // 以后端 DB 为准，同步覆盖本地 chrome.storage
         fetch(`${backendUrl}/get_rules?pid=${userPid}&platform=0`)
             .then(r => r.json())
             .then(data => {
@@ -414,89 +399,104 @@ const Dashboard = ({ isOpen, openBuddy }) => {
     };
 
     return (
-        <div style={{ display: 'flex', width: '750px', height: '600px', flexDirection: 'column', background: '#fff', overflow: 'hidden' }}>
-            {/* 顶部标题 */}
-            <div style={{
-                padding: '10px 16px',
-                borderBottom: '2px solid #1677ff',
-                fontWeight: 'bold',
-                fontSize: 16,
-                background: '#fff',
-                color: '#1677ff',
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-            }}>
-                <span>Hi, {userPid}! 欢迎使用个性化新闻推荐助手</span>
+        <div className="dashboard-wrapper">
+            {/* 顶部标题栏 */}
+            <div className="dashboard-header">
+                <div className="header-left">
+                    <img src={iconRobot1} alt="robot" className="header-robot-icon" />
+                    <div className="header-text">
+                        <span className="header-title">Hi, {userPid}! 欢迎使用个性化资讯推荐助手</span>
+                        <span className="header-subtitle">智能推荐你关心的资讯，发现更多精彩内容</span>
+                    </div>
+                </div>
                 <Switch
                     checked={isOpen}
                     onChange={openBuddy}
-                    checkedChildren={<Link to="/home">On</Link>}
-                    unCheckedChildren={<Link to="/">Off</Link>}
+                    className="header-switch"
                 />
             </div>
 
             {/* 主体区域 */}
-            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                {/* 左列：历史偏好 + 聊天 */}
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, borderRight: '1px solid #e8e8e8', overflow: 'hidden' }}>
+            <div className="dashboard-body">
+                {/* 左列 */}
+                <div className="dashboard-left">
                     {/* 历史偏好 */}
                     <HistoryPreference personalities={personalities} loading={prefLoading} onRefresh={refreshPreference} onCollapseChange={handlePreferenceCollapseChange} />
 
-                    {/* 聊天框 */}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                        <div style={{ fontSize: 12, fontWeight: 'bold', color: '#555', padding: '6px 12px', background: '#f0f4ff', borderBottom: '1px solid #e8e8e8', flexShrink: 0 }}>
-                            规则配置助手
+                    {/* 推荐助手聊天区 */}
+                    <div className="dash-card chat-card">
+                        <div className="card-header">
+                            <div className="card-title">
+                                <img src={iconRobot1} alt="robot" className="card-icon" />
+                                <span>推荐助手</span>
+                            </div>
                         </div>
-                        <div
-                            ref={chatEndRef}
-                            style={{ flex: 1, overflowY: 'auto', padding: '8px', background: '#fff' }}
-                        >
+                        <div className="chat-messages" ref={chatEndRef}>
                             <Spin spinning={chatLoading}>
                                 <Messages allmessage={chatHistory} />
                             </Spin>
                         </div>
-                        <div style={{ padding: '6px 8px', borderTop: '1px solid #e8e8e8', flexShrink: 0 }}>
-                            <Search
-                                placeholder="输入消息..."
-                                allowClear
-                                value={message}
-                                onChange={e => setMessage(e.target.value)}
-                                enterButton="发送"
-                                size="middle"
-                                onSearch={sendMessage}
+                        <div className="chat-footer">
+                            <div className="input-wrapper">
+                                <SendOutlined className="input-icon" />
+                                <Input
+                                    placeholder="输入消息..."
+                                    value={message}
+                                    onChange={e => setMessage(e.target.value)}
+                                    onPressEnter={sendMessage}
+                                    disabled={!enabled}
+                                    bordered={false}
+                                    className="chat-input"
+                                />
+                            </div>
+                            <Button
+                                type="primary"
+                                onClick={sendMessage}
                                 disabled={!enabled}
                                 loading={!enabled}
-                            />
+                                className="send-btn"
+                            >
+                                发送
+                            </Button>
                         </div>
                     </div>
                 </div>
 
                 {/* 右列：规则列表 */}
-                <div style={{ width: 320, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <div style={{ fontSize: 12, fontWeight: 'bold', color: '#555', padding: '6px 12px', background: '#f0f4ff', borderBottom: '1px solid #e8e8e8', flexShrink: 0 }}>
-                        已有规则
-                    </div>
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-                        <List
-                            dataSource={rules}
-                            renderItem={(item, index) => (
-                                <ProfileCard
-                                    key={index}
-                                    item={item}
-                                    delFunc={() => deleteRule(item.iid, index)}
-                                    saveFunc={data => updateRule(item.iid, data, index)}
-                                    toggleEdit={() => toggleEditRule(index)}
-                                    edit={editable[index]}
-                                    isModalOpen={isModalOpen[index]}
-                                    setIsModalOpen={() => changeModalOpen(index)}
-                                />
-                            )}
-                        />
-                        <Button type="dashed" size="middle" onClick={addRule} style={{ width: '100%', marginTop: 4 }}>
-                            + 新增规则
-                        </Button>
+                <div className="dashboard-right">
+                    <div className="dash-card rules-card">
+                        <div className="card-header">
+                            <div className="card-title">
+                                <img src={iconRule} alt="rule" className="card-icon" />
+                                <span>已有规则</span>
+                            </div>
+                        </div>
+                        <div className="rules-list">
+                            <List
+                                dataSource={rules}
+                                renderItem={(item, index) => (
+                                    <ProfileCard
+                                        key={index}
+                                        item={item}
+                                        delFunc={() => deleteRule(item.iid, index)}
+                                        saveFunc={data => updateRule(item.iid, data, index)}
+                                        toggleEdit={() => toggleEditRule(index)}
+                                        edit={editable[index]}
+                                        isModalOpen={isModalOpen[index]}
+                                        setIsModalOpen={() => changeModalOpen(index)}
+                                    />
+                                )}
+                            />
+                            <Button
+                                type="dashed"
+                                size="large"
+                                onClick={addRule}
+                                className="add-rule-btn"
+                                icon={<PlusOutlined />}
+                            >
+                                新增规则
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>
