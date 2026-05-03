@@ -232,20 +232,24 @@
 }
 
 .dashboard-wrapper .message .avatar {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     flex-shrink: 0;
 }
 
 .dashboard-wrapper .message .text {
-    padding: 6px 12px;
-    border-radius: 12px;
+    padding: 4px 10px;
+    border-radius: 10px;
     background: #f5f3fa;
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.4;
     color: #333;
     max-width: 85%;
+}
+
+.dashboard-wrapper .message .text p {
+    margin: 2px 0;
 }
 
 .dashboard-wrapper .message.user {

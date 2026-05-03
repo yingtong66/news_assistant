@@ -33,7 +33,7 @@
 import React, {useState, useRef, useEffect, useContext} from "react";
 import "./Chatbot.css";
 import userAvatar from "../../images/user-avatar.png";
-import botAvatar from "../../images/bot-avatar.png";
+import botAvatar from "../../images/icon_robot-2.png";
 import { Drawer, Input, Spin} from 'antd';
 import { Content } from "antd/es/layout/layout";
 import ChatHeader from "./ChatHeader";

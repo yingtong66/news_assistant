@@ -42,7 +42,7 @@ import { backendUrl } from "../utils/Const";
 import { setItem } from "../utils/Chrome/setItem.js";
 import { useLocation } from "react-router-dom";
 import { getItem } from "../utils/Chrome/getItem.js";
-import botAvatar from "../images/bot-avatar.png";
+import botAvatar from "../images/icon_robot-2.png";
 import UserContext from "../contexts/UserContext";
 
 const SearchItem = (
